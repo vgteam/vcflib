@@ -166,26 +166,28 @@ int Variant::getMaxReferenceLength(){
     if (!this->is_symbolic_sv()){
         return this->zeroBasedPosition() + this->ref.length() - 1;
     }
-    else if (this->canonicalizable()){
-        int len = 0;
-        if (this->info.find("SVLEN") != this->info.end()){
-            for (auto s : this->info.at("SVLEN")){
-                int alt_len = abs(stoi(s));
-                len = max(alt_len, len);
-            }
-            return this->zeroBasedPosition() + len;
+    
+    int len = 0;
+    if (this->info.find("SVLEN") != this->info.end()){
+        for (auto s : this->info.at("SVLEN")){
+            int alt_len = abs(stoi(s));
+            len = max(alt_len, len);
         }
-        else if (this->info.find("END") != this->info.end()){
-            for (auto s : this->info.at("SVLEN")){
-                len = max(abs(stoi(s)), len);
-            }
-            return len - 1;
-        }
-        else{
-            cerr << "Warning: insufficient length information for " << *this << endl;
-            return -1;
-        }
+        cerr << "Had SV len" << endl;
+        return this->zeroBasedPosition() + len;
     }
+    else if (this->info.find("END") != this->info.end()){
+        for (auto s : this->info.at("END")){
+            len = max(abs(stoi(s)), len);
+        }
+        cerr << "Had end" << endl;
+        return len - 1;
+    }
+    else{
+        cerr << "Warning: insufficient length information for " << *this << endl;
+        return -1;
+    }
+    
 
     return -1;
 }
