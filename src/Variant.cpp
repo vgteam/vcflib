@@ -388,10 +388,10 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     bool has_end = this->info.count("END") && !this->info.at("END").empty();
     
     // Where is the end, or where should it be?
-    long info_end = 0;
+    uint64_t info_end = 0;
     if (has_end) {
         // Get the END from the tag
-        info_end = stol(this->info.at("END")[0]);
+        info_end = stoull(this->info.at("END")[0]);
     }
     else if(ref_valid && !place_seq) {
         // Get the END from the reference sequence, which is ready.
@@ -421,13 +421,13 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     
     // What is the variant length change?
     // We store it as absolute value
-    long info_len = 0;
+    uint64_t info_len = 0;
     if (has_len){
         // Get the SVLEN from the tag
-        info_len = abs(stol(this->info.at("SVLEN")[0]));
+        info_len = abs(stoll(this->info.at("SVLEN")[0]));
     }
     else if ((svtype == "INS" || svtype == "DEL") && has_span){
-        info_len = abs(stol(this->info.at("SPAN")[0]));
+        info_len = abs(stoll(this->info.at("SPAN")[0]));
     }
     else if (svtype == "DEL"){
         // We always have the end by now
@@ -462,7 +462,7 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     has_len = true;
     
     // We also compute a span
-    long info_span = 0;
+    uint64_t info_span = 0;
     if (has_span){
         // Use the specified span
         info_span = abs(stol(this->info.at("SVLEN")[0]));
