@@ -388,7 +388,7 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     bool has_end = this->info.count("END") && !this->info.at("END").empty();
     
     // Where is the end, or where should it be?
-    uint64_t info_end = 0;
+    int64_t info_end = 0;
     if (has_end) {
         // Get the END from the tag
         info_end = stoull(this->info.at("END")[0]);
@@ -421,7 +421,7 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     
     // What is the variant length change?
     // We store it as absolute value
-    uint64_t info_len = 0;
+    int64_t info_len = 0;
     if (has_len){
         // Get the SVLEN from the tag
         info_len = abs(stoll(this->info.at("SVLEN")[0]));
@@ -462,7 +462,7 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     has_len = true;
     
     // We also compute a span
-    uint64_t info_span = 0;
+    int64_t info_span = 0;
     if (has_span){
         // Use the specified span
         info_span = abs(stol(this->info.at("SVLEN")[0]));
