@@ -314,6 +314,7 @@ bool Variant::canonicalizable(){
     
     if (svtype.empty()){
         // We have no SV type, so we can't interpret things.
+        cerr << "No SV type information. Variant cannot be canonicalized: " << *this << endl;
         return false;
     }
     
