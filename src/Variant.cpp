@@ -145,25 +145,25 @@ void Variant::parse(string& line, bool parseSamples) {
         vector<string>::iterator sampleName = sampleNames.begin();
         vector<string>::iterator sample = fields.begin() + 9;
         for (; sample != fields.end() && sampleName != sampleNames.end(); 
-	     ++sample, ++sampleName) {
-	  string& name = *sampleName;
-	  
-	  vector<string> samplefields = split(*sample, ':');
-	  vector<string>::iterator i = samplefields.begin();
-	  
-	  for (vector<string>::iterator f = format.begin(); 
-	       f != format.end(); ++f) {
-	    
-	    if(i != samplefields.end()){
-	      samples[name][*f] = split(*i, ','); ++i;
-	    }
-	    else{
-	      std::vector<string> missing;
-	      missing.push_back(".");
-	      samples[name][*f] = missing;
-	    }
-	  }
-	}
+             ++sample, ++sampleName) {
+          string& name = *sampleName;
+          
+          vector<string> samplefields = split(*sample, ':');
+          vector<string>::iterator i = samplefields.begin();
+          
+          for (vector<string>::iterator f = format.begin(); 
+               f != format.end(); ++f) {
+            
+            if(i != samplefields.end()){
+              samples[name][*f] = split(*i, ','); ++i;
+            }
+            else{
+              std::vector<string> missing;
+              missing.push_back(".");
+              samples[name][*f] = missing;
+            }
+          }
+        }
  
         if (sampleName != sampleNames.end()) {
             cerr << "error: more sample names in header than sample fields" << endl;
@@ -200,7 +200,7 @@ bool Variant::isSymbolicSV() const{
     bool ref_valid = allATGCN(this->ref);
     bool alts_valid = true;
     for (auto a : this->alt){
-        if (!allATGCN(a)){
+        if (!allATGCN(a) && a != "*"){
             alts_valid = false;
         }
     }
@@ -299,7 +299,7 @@ bool Variant::canonicalizable(){
     bool pre_canon = allATGCN(this->ref);
     
     for (auto& a : this->alt){
-        if (!allATGCN(a)){
+        if (!allATGCN(a) && a != "*"){
             pre_canon = false;
         }
     }
@@ -367,9 +367,9 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     }
     
     // Check the alts to see if they are not symbolic
-    vector<bool> alt_i_atgcn (alt.size());
+    vector<bool> alt_i_nonsymbolic (alt.size());
     for (int i = 0; i < alt.size(); ++i){
-        alt_i_atgcn[i] = allATGCN(alt[i]);
+        alt_i_nonsymbolic[i] = allATGCN(alt[i]);
     }
     
     // Only allow single-alt variants
@@ -377,6 +377,12 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
     if (!single_alt){
         // TODO: this will need to be remove before supporting multiple alleles
         cerr << "Warning: multiple ALT alleles not yet allowed for SVs" << endl;
+        return false;
+    }
+    
+    if (alt[0] == "*"){
+        // TODO: when we support multiple alleles it could make sense to have a *
+        cerr << "Warning: '*' ALT alleles not yet allowed for SVs" << endl;
         return false;
     }
     
@@ -551,7 +557,7 @@ bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReferenc
             }
             
         }
-        else if (alt_i_atgcn[0] && !has_seq){
+        else if (alt_i_nonsymbolic[0] && !has_seq){
             string s = this->alt[0];
             s = toUpper(s.substr(this->ref.length()));
             this->info["SEQ"].resize(1);
@@ -1525,13 +1531,13 @@ void VariantFilter::removeFilteredGenotypes(Variant& var, bool keepInfo) {
     for (vector<string>::iterator s = var.sampleNames.begin(); s != var.sampleNames.end(); ++s) {
         string& name = *s;
         if (!passes(var, name)) {
-        	if (keepInfo) {
-				var.samples[name]["GT"].clear();
-				var.samples[name]["GT"].push_back("./.");
-        	}
-        	else {
-			    var.samples.erase(name);
-        	}
+                if (keepInfo) {
+                                var.samples[name]["GT"].clear();
+                                var.samples[name]["GT"].push_back("./.");
+                }
+                else {
+                            var.samples.erase(name);
+                }
         }
     }
 }
@@ -1751,7 +1757,7 @@ bool VariantCallFile::parseHeader(string& hs) {
 
     if (hs.empty()) return false;
     if (hs.substr(hs.size() - 1, 1) == "\n") {
-	hs.erase(hs.size() - 1, 1); // remove trailing newline
+        hs.erase(hs.size() - 1, 1); // remove trailing newline
     }
     header = hs; // stores the header in the object instance
 
@@ -1895,7 +1901,7 @@ bool VariantCallFile::setRegion(string region) {
     }
     if (tabixFile->setRegion(region)) {
         if (tabixFile->getNextLine(line)) {
-	    justSetRegion = true;
+            justSetRegion = true;
             return true;
         } else {
             return false;
@@ -2119,33 +2125,40 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
       
       string& alternate = *a;
       vector<VariantAllele>& variants = variantAlleles[alternate];
+      
+      if (alternate == "*") {
+        // Site is covered by a snpanning deletion.
+        // Leave an empty list of VariantAlleles
+        continue;
+      }
+      
       string alternateQuery_M;
       if (flankingRefLeft.empty() && flankingRefRight.empty()) {
-	alternateQuery_M = padding + alternate + padding;
-	alternateQuery_M[paddingLen] = anchorChar;
+        alternateQuery_M = padding + alternate + padding;
+        alternateQuery_M[paddingLen] = anchorChar;
       } else {
-	alternateQuery_M = flankingRefLeft + alternate + flankingRefRight;
+        alternateQuery_M = flankingRefLeft + alternate + flankingRefRight;
       }
       //const unsigned int alternateLen = alternate.size();
       
       if (true) {
-	CSmithWatermanGotoh sw(matchScore, 
-			       mismatchScore, 
-			       gapOpenPenalty, 
-			       gapExtendPenalty);
-	if (useEntropy) sw.EnableEntropyGapPenalty(1);
-	if (repeatGapExtendPenalty != 0){
-	  sw.EnableRepeatGapExtensionPenalty(repeatGapExtendPenalty);
-	}
-	sw.Align(referencePos, cigar, reference_M, alternateQuery_M);
+        CSmithWatermanGotoh sw(matchScore, 
+                               mismatchScore, 
+                               gapOpenPenalty, 
+                               gapExtendPenalty);
+        if (useEntropy) sw.EnableEntropyGapPenalty(1);
+        if (repeatGapExtendPenalty != 0){
+          sw.EnableRepeatGapExtensionPenalty(repeatGapExtendPenalty);
+        }
+        sw.Align(referencePos, cigar, reference_M, alternateQuery_M);
       } else {  // disabled for now
-	StripedSmithWaterman::Aligner aligner;
-	StripedSmithWaterman::Filter sswFilter;
-	StripedSmithWaterman::Alignment alignment;
-	aligner.Align(alternateQuery_M.c_str(), 
-		      reference_M.c_str(), 
-		      reference_M.size(), sswFilter, &alignment);
-	cigar = alignment.cigar_string;
+        StripedSmithWaterman::Aligner aligner;
+        StripedSmithWaterman::Filter sswFilter;
+        StripedSmithWaterman::Alignment alignment;
+        aligner.Align(alternateQuery_M.c_str(), 
+                      reference_M.c_str(), 
+                      reference_M.size(), sswFilter, &alignment);
+        cigar = alignment.cigar_string;
       }
 
       // left-realign the alignment...
@@ -2153,17 +2166,17 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
       vector<pair<int, string> > cigarData = splitCigar(cigar);
       
       if (cigarData.front().second != "M" 
-	  || cigarData.back().second != "M"
-	  || cigarData.front().first < paddingLen 
-	  || cigarData.back().first < paddingLen) {
-	cerr << "parsedAlternates: alignment does not start with match over padded sequence" << endl;
-	cerr << cigar << endl;
-	cerr << reference_M << endl;
-	cerr << alternateQuery_M << endl;
-	exit(1);
+          || cigarData.back().second != "M"
+          || cigarData.front().first < paddingLen 
+          || cigarData.back().first < paddingLen) {
+        cerr << "parsedAlternates: alignment does not start with match over padded sequence" << endl;
+        cerr << cigar << endl;
+        cerr << reference_M << endl;
+        cerr << alternateQuery_M << endl;
+        exit(1);
       } else {
-	cigarData.front().first -= paddingLen;
-	cigarData.back().first -= paddingLen;;
+        cigarData.front().first -= paddingLen;
+        cigarData.back().first -= paddingLen;;
       }
       //cigarData = cleanCigar(cigarData);
       cigar = joinCigar(cigarData);
@@ -2172,89 +2185,89 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
       int refpos = 0;
       
       for (vector<pair<int, string> >::iterator e = cigarData.begin(); 
-	   e != cigarData.end(); ++e) {
-	
-	int len = e->first;
-	string type = e->second;
-	
-	switch (type.at(0)) {
-	case 'I':
-	  if (includePreviousBaseForIndels) {
-	    if (!variants.empty() && 
-		variants.back().ref != variants.back().alt) {
-	      VariantAllele a = 
-		VariantAllele("", 
-			      alternate.substr(altpos, len), 
-			      refpos + position);
-	      variants.back() = variants.back() + a;
-	    } else {
-	      VariantAllele a = 
-		VariantAllele(ref.substr(refpos - 1, 1),
-			      alternate.substr(altpos - 1, len + 1),
-			      refpos + position - 1);
-	      variants.push_back(a);
-	    }
-	  } else {
-	    variants.push_back(VariantAllele("", 
-					     alternate.substr(altpos, len),
-					     refpos + position));
-	  }
-	  altpos += len;
-	  break;
-	case 'D':
-	  if (includePreviousBaseForIndels) {
-	    if (!variants.empty() &&
-		variants.back().ref != variants.back().alt) {
-	      VariantAllele a 
-		= VariantAllele(ref.substr(refpos, len)
-				, "", refpos + position);
-	      variants.back() = variants.back() + a;
-	      } else {
-	      VariantAllele a 
-		= VariantAllele(ref.substr(refpos - 1, len + 1),
-				alternate.substr(altpos - 1, 1),
-				refpos + position - 1);
-	      variants.push_back(a);
-	    }
-	  } else {
-	    variants.push_back(VariantAllele(ref.substr(refpos, len), 
-					     "", refpos + position));
-	  }
-	  refpos += len;
-	  break;
+           e != cigarData.end(); ++e) {
+        
+        int len = e->first;
+        string type = e->second;
+        
+        switch (type.at(0)) {
+        case 'I':
+          if (includePreviousBaseForIndels) {
+            if (!variants.empty() && 
+                variants.back().ref != variants.back().alt) {
+              VariantAllele a = 
+                VariantAllele("", 
+                              alternate.substr(altpos, len), 
+                              refpos + position);
+              variants.back() = variants.back() + a;
+            } else {
+              VariantAllele a = 
+                VariantAllele(ref.substr(refpos - 1, 1),
+                              alternate.substr(altpos - 1, len + 1),
+                              refpos + position - 1);
+              variants.push_back(a);
+            }
+          } else {
+            variants.push_back(VariantAllele("", 
+                                             alternate.substr(altpos, len),
+                                             refpos + position));
+          }
+          altpos += len;
+          break;
+        case 'D':
+          if (includePreviousBaseForIndels) {
+            if (!variants.empty() &&
+                variants.back().ref != variants.back().alt) {
+              VariantAllele a 
+                = VariantAllele(ref.substr(refpos, len)
+                                , "", refpos + position);
+              variants.back() = variants.back() + a;
+              } else {
+              VariantAllele a 
+                = VariantAllele(ref.substr(refpos - 1, len + 1),
+                                alternate.substr(altpos - 1, 1),
+                                refpos + position - 1);
+              variants.push_back(a);
+            }
+          } else {
+            variants.push_back(VariantAllele(ref.substr(refpos, len), 
+                                             "", refpos + position));
+          }
+          refpos += len;
+          break;
 
-	  // zk has added (!variants.empty()) solves the seg fault in 
+          // zk has added (!variants.empty()) solves the seg fault in 
           // vcfstats, but need to test
-	case 'M':
-	  {
-	    for (int i = 0; i < len; ++i) {
-	      VariantAllele a 
-		= VariantAllele(ref.substr(refpos + i, 1),
-				alternate.substr(altpos + i, 1),
-				(refpos + i + position));
-	      if (useMNPs && (!variants.empty()) &&
-		  variants.back().ref.size() == variants.back().alt.size()
-		  && variants.back().ref != variants.back().alt) {
-		  variants.back() = variants.back() + a;
-	      } else {
-		variants.push_back(a);
-	      }
-	    }
-	  }
-	  refpos += len;
-	  altpos += len;
-	  break;
-	case 'S':
-	  {
-	    refpos += len;
-	    altpos += len;
-	    break;
-	  }
-	default:
-	  {
-	    break;
-	  }
-	}
+        case 'M':
+          {
+            for (int i = 0; i < len; ++i) {
+              VariantAllele a 
+                = VariantAllele(ref.substr(refpos + i, 1),
+                                alternate.substr(altpos + i, 1),
+                                (refpos + i + position));
+              if (useMNPs && (!variants.empty()) &&
+                  variants.back().ref.size() == variants.back().alt.size()
+                  && variants.back().ref != variants.back().alt) {
+                  variants.back() = variants.back() + a;
+              } else {
+                variants.push_back(a);
+              }
+            }
+          }
+          refpos += len;
+          altpos += len;
+          break;
+        case 'S':
+          {
+            refpos += len;
+            altpos += len;
+            break;
+          }
+        default:
+          {
+            break;
+          }
+        }
       }
     }
     return variantAlleles;
@@ -2265,7 +2278,10 @@ map<string, vector<VariantAllele> > Variant::flatAlternates(void) {
     for (vector<string>::iterator a = alt.begin(); a != alt.end(); ++a) {
         string& alternate = *a;
         vector<VariantAllele>& variants = variantAlleles[alternate];
-        variants.push_back(VariantAllele(ref, alternate, position));
+        if (alternate != "*") {
+            // Not a spanning deletion
+            variants.push_back(VariantAllele(ref, alternate, position));
+        }
     }
     return variantAlleles;
 }
@@ -2320,52 +2336,52 @@ void Variant::updateAlleleIndexes(void) {
 }
 
 // TODO only works on "A"llele variant fields
-  void Variant::removeAlt(const string& altAllele) {
+void Variant::removeAlt(const string& altAllele) {
 
     int altIndex = getAltAlleleIndex(altAllele);  // this is the alt-relative index, 0-based
     
     for (map<string, int>::iterator c = vcf->infoCounts.begin(); 
-	 c != vcf->infoCounts.end(); ++c) {
+         c != vcf->infoCounts.end(); ++c) {
       int count = c->second;
       if (count == ALLELE_NUMBER) {
-	string key = c->first;
-	map<string, vector<string> >::iterator v = info.find(key);
-	if (v != info.end()) {
-	  vector<string>& vals = v->second;
-	  vector<string> tokeep;
-	  int i = 0;
-	  for (vector<string>::iterator a = vals.begin(); 
-	       a != vals.end(); ++a, ++i) {
-	    if (i != altIndex) {
-	      tokeep.push_back(*a);
-	    }
-	  }
-	  vals = tokeep;
-	}
+        string key = c->first;
+        map<string, vector<string> >::iterator v = info.find(key);
+        if (v != info.end()) {
+          vector<string>& vals = v->second;
+          vector<string> tokeep;
+          int i = 0;
+          for (vector<string>::iterator a = vals.begin(); 
+               a != vals.end(); ++a, ++i) {
+            if (i != altIndex) {
+              tokeep.push_back(*a);
+            }
+          }
+          vals = tokeep;
+        }
       }
     }
     
     for (map<string, int>::iterator c = vcf->formatCounts.begin(); 
-	 c != vcf->formatCounts.end(); ++c) {
+         c != vcf->formatCounts.end(); ++c) {
       int count = c->second;
       if (count == ALLELE_NUMBER) {
             string key = c->first;
             for (map<string, map<string, vector<string> > >::iterator 
-		   s = samples.begin(); s != samples.end(); ++s) {
-	      map<string, vector<string> >& sample = s->second;
-	      map<string, vector<string> >::iterator v = sample.find(key);
-	      if (v != sample.end()) {
-		vector<string>& vals = v->second;
-		vector<string> tokeep;
-		int i = 0;
-		for (vector<string>::iterator a = vals.begin(); 
-		     a != vals.end(); ++a, ++i) {
-		  if (i != altIndex) {
-		    tokeep.push_back(*a);
-		  }
-		}
-		vals = tokeep;
-	      }
+                   s = samples.begin(); s != samples.end(); ++s) {
+              map<string, vector<string> >& sample = s->second;
+              map<string, vector<string> >::iterator v = sample.find(key);
+              if (v != sample.end()) {
+                vector<string>& vals = v->second;
+                vector<string> tokeep;
+                int i = 0;
+                for (vector<string>::iterator a = vals.begin(); 
+                     a != vals.end(); ++a, ++i) {
+                  if (i != altIndex) {
+                    tokeep.push_back(*a);
+                  }
+                }
+                vals = tokeep;
+              }
             }
       }
     }
