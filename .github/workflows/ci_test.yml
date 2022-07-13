@@ -1,16 +1,25 @@
-name: CI
+name: Vcflib CI
 on: [push, pull_request]
 jobs:
   arch:
     name: vcflib-CI
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         os: [ubuntu-latest]
         python-version: [3.8]
     steps:
-    - name: Install dependencies
-      run: sudo apt-get install cmake libhts-dev libtabixpp-dev libtabixpp0
+    - name: apt update
+      run: sudo apt-get -o Acquire::Retries=3 update
+    - name: install dependencies
+      run: sudo apt-get -o Acquire::Retries=3 install -y -V
+        cmake
+        libhts-dev
+        libtabixpp-dev
+        libtabixpp0
+        libcurl4-openssl-dev
+        pybind11-dev
     - uses: actions/checkout@v2
     - uses: actions/setup-python@v1
       with:
@@ -23,7 +32,7 @@ jobs:
         cd build
         cmake ..
     - name: Compile
-      run: cmake --build build/ --verbose
+      run: cmake --build build/ --verbose -- -j 2
     - name: Run tests
       run: |
         cd build

@@ -1,27 +1,43 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.16)
 project(vcflib)
+
+set(CMAKE_CXX_STANDARD 17)
 
 include(ExternalProject)
 include(FeatureSummary)
 
 find_package(PkgConfig REQUIRED)
+find_package(pybind11 CONFIG)
 
 include(FindBZip2)
 include(FindLibLZMA)
 include(FindZLIB)
+include(FindCURL) # for htslib
 
 feature_summary(
   FATAL_ON_MISSING_REQUIRED_PACKAGES
   WHAT REQUIRED_PACKAGES_NOT_FOUND)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON) # for pybind11
+
 # ---- Options
 
 option(BUILD_DOC "Build documentation" ON)
-option(OPENMP "Enable OpenMP" OFF)
+option(OPENMP "Enable OpenMP" ON) # disabling does not work because of vcfwave
 option(PROFILING "Enable profiling" OFF)
 option(GPROF "Enable gprof profiling" OFF)
+option(ASAN "Use address sanitiser" OFF)
+
+include(CheckIPOSupported) # adds lto
+check_ipo_supported(RESULT ipo_supported OUTPUT output)
 
 # ---- Dependencies
+
+if(OPENMP)
+  include(FindOpenMP)
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif(OPENMP)
 
 find_package(ZLIB)
 set_package_properties(ZLIB PROPERTIES TYPE REQUIRED)
@@ -30,15 +46,41 @@ set_package_properties(ZLIB PROPERTIES TYPE REQUIRED)
 find_package(Threads)
 set_package_properties(Threads PROPERTIES TYPE REQUIRED)
 
-pkg_check_modules(HTSLIB htslib)
-pkg_check_modules(TABIXPP tabixpp) # Optional
+pkg_check_modules(HTSLIB htslib)   # Optionally builds from contrib/
+pkg_check_modules(TABIXPP tabixpp) # Optionally builds from contrib/
 
 # ---- Build switches
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ${ipo_supported})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -std=c++0x -D_FILE_OFFSET_BITS=64 -Isrc -O3")
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING
+          "Choose the type of build, options are: Release|Debug|RelWithDebInfo (for distros)." FORCE)
+endif()
+
+if (${CMAKE_BUILD_TYPE} MATCHES Release)
+  set(EXTRA_FLAGS "-march=native -D_FILE_OFFSET_BITS=64")
+  # set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG") # reset CXX_FLAGS to replace -O3 with -Ofast
+endif()
+
+if ((${CMAKE_BUILD_TYPE} MATCHES Release) OR (${CMAKE_BUILD_TYPE} MATCHES RelWithDebInfo))
+  set (CMAKE_C_FLAGS "${OpenMP_C_FLAGS} ${EXTRA_FLAGS}")
+  set (CMAKE_CXX_FLAGS "${OpenMP_CXX_FLAGS} ${EXTRA_FLAGS}")
+endif ()
+
+if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_FLAGS}")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${EXTRA_FLAGS}")
+  add_definitions(-Wfatal-errors)
+endif ()
+
+if (ASAN)
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address  -fno-omit-frame-pointer -fno-common")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address  -fno-omit-frame-pointer -fno-common")
+endif(ASAN)
 
 if(OPENMP)
-  find_package(OpenMP REQUIRED)
+  # find_package(OpenMP REQUIRED)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif(OPENMP)
 
@@ -59,12 +101,20 @@ include_directories(smithwaterman)
 include_directories(multichoose)
 include_directories(filevercmp)
 
-if(HTSLIB_LOCAL)
-  include_directories(
-  ${HTSLIB_LOCAL}
-  tabixpp/htslib
-  contrib/htslib)
-endif(HTSLIB_LOCAL)
+if(NOT HTSLIB_FOUND)
+  set(HTSLIB_LOCAL contrib/tabixpp/htslib)
+  set(TABIX_FOUND OFF) # also build tabixpp if htslib is missing
+endif()
+
+if (NOT TABIX_FOUND)
+  set(TABIXPP_LOCAL contrib/tabixpp)
+  include_directories(contrib/tabixpp)
+  set(tabixpp_SOURCE
+    contrib/tabixpp/tabix.cpp
+  )
+endif()
+
+set(WFA_LOCAL contrib/WFA2-lib)
 
 file(GLOB INCLUDES
   src/*.h*
@@ -74,7 +124,8 @@ file(GLOB INCLUDES
   fastahack/*.h*
   filevercmp/*.h*)
 
-add_library(vcflib STATIC
+set(vcflib_SOURCE
+    src/legacy.cpp
     src/Variant.h
     src/split.h
     src/pdflib.hpp
@@ -90,6 +141,12 @@ add_library(vcflib STATIC
     src/split.cpp
     src/ssw.hpp
     src/ssw_cpp.hpp
+    src/legacy.cpp
+    src/rkmh.cpp
+    src/murmur3.cpp
+    src/LeftAlign.cpp
+    src/cigar.cpp
+    src/allele.cpp
     fastahack/Fasta.cpp
     smithwaterman/SmithWatermanGotoh.cpp
     smithwaterman/Repeats.cpp
@@ -98,6 +155,14 @@ add_library(vcflib STATIC
     smithwaterman/LeftAlign.cpp
     fsom/fsom.c
     filevercmp/filevercmp.c
+)
+
+if (TABIXPP_LOCAL) # add the tabixpp source file
+    list(APPEND vcflib_SOURCE ${tabixpp_SOURCE})
+endif()
+
+add_library(vcflib STATIC
+    ${vcflib_SOURCE}
     )
 
 set(BINS
@@ -122,6 +187,7 @@ set(BINS
     permuteSmooth
     normalize-iHS
     meltEHH
+    vcfnullgenofields
     vcfaltcount
     vcfhetcount
     vcfhethomratio
@@ -148,6 +214,7 @@ set(BINS
     vcfintersect
     vcfannotate
     vcfallelicprimitives
+    vcfwave
     vcfoverlay
     vcfaddinfo
     vcfkeepinfo
@@ -239,45 +306,121 @@ file (STRINGS "VERSION" BUILD_NUMBER)
 add_definitions(-DVCFLIB_VERSION="${BUILD_NUMBER}")
 add_definitions(-DVERSION="${BUILD_NUMBER}")
 
+
 # ---- Build htslib
 #
 # Note by default we use the distributed htslib! These are
-# the old instructions:
+# the older instructions which allow for a local build from
+# git submodules
 
 if (HTSLIB_LOCAL)
 
-ExternalProject_Add(htslib-build
-  SOURCE_DIR ${HTSLIB_LOCAL}
-  BINARY_DIR ${HTSLIB_LOCAL}
-  PREFIX ${CMAKE_CURRENT_BINARY_DIR}/htslib
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND $(MAKE) lib-static
-  INSTALL_COMMAND ""
+  include_directories(${HTSLIB_LOCAL})
+
+  set(flags "-O2 -g -fPIC")
+  ExternalProject_Add(htslib-EXT
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/${HTSLIB_LOCAL}"
+    UPDATE_COMMAND autoreconf -i
+    CONFIGURE_COMMAND ./configure --disable-s3
+    INSTALL_COMMAND ""
+    BUILD_IN_SOURCE ON
+    BUILD_COMMAND $(MAKE) CFLAGS=${flags} lib-static
   )
+  ExternalProject_Get_property(htslib-EXT SOURCE_DIR)
+  ExternalProject_Get_property(htslib-EXT INSTALL_DIR)
+  set(htslib_INCLUDE "${SOURCE_DIR}")
+  set(htslib_static "${SOURCE_DIR}/libhts.a")
+  set(htslib_lib "${htslib_static}")
+  set(HTSLIB_LINK_LIBRARIES "${htslib_static}")
 
-add_library(htslib STATIC IMPORTED)
+  add_custom_target(htslib
+    DEPENDS htslib-EXT
+    VERBATIM)
 
-set_property(TARGET htslib PROPERTY
-  IMPORTED_LOCATION ${HTSLIB_LOCAL}/libhts.a)
-add_dependencies(htslib htslib-build)
+  # set_property(TARGET htslib PROPERTY IMPORTED_LOCATION ${hstlib_lib})
+  # add_dependencies(htslib htslib-EXT)
+
+  add_library(HTSLIB_LIBRARIES STATIC IMPORTED)
+  set_target_properties(HTSLIB_LIBRARIES PROPERTIES IMPORTED_LOCATION ${htslib_lib})
+  add_dependencies(HTSLIB_LIBRARIES htslib-EXT)
 
 # If the user wants to configure our HTSlib to build with libddeflate, we need
 # to make sure to link against libdeflate as a transitive dependency. To do
 # that, pass -DHTSLIB_EXTRA_LIBS="-ldeflate" when configuring the project with
 # cmake.
 # TODO: Stop vendoring in htslib and just use find_package
-set(HTSLIB_EXTRA_LIBS "-lcurl" CACHE STRING "Library flags needed to link with htslib's dependencies, for chosen configuration")
-set_property(TARGET htslib PROPERTY INTERFACE_LINK_LIBRARIES ${HTSLIB_EXTRA_LIBS})
+
+  # set(HTSLIB_EXTRA_LIBS "-lcurl" CACHE STRING "Library flags needed to link with htslib's dependencies, for chosen configuration")
+  # set_property(TARGET htslib PROPERTY INTERFACE_LINK_LIBRARIES ${HTSLIB_EXTRA_LIBS})
 
 endif(HTSLIB_LOCAL)
+
+# FIXME: hard-coded compile switches need to be fixed upstream
+if (ASAN)
+  set(wfa_MAKE_ARGS BUILD_TOOLS=0 BUILD_EXAMPLES=0 CC_FLAGS=-fPIC setup asan lib_wfa)
+else()
+  set(wfa_MAKE_ARGS BUILD_TOOLS=0 BUILD_EXAMPLES=0 CC_FLAGS=-fPIC setup lib_wfa)
+endif()
+
+# if ((${CMAKE_BUILD_TYPE} MATCHES Release) OR (${CMAKE_BUILD_TYPE} MATCHES RelWithDebInfo))
+#   set(wfa_MAKE_ARGS ${wfa_MAKE_ARGS})
+# endif()
+
+ExternalProject_Add(wfa-EXT
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/${WFA_LOCAL}"
+    UPDATE_COMMAND ""
+    CONFIGURE_COMMAND ""
+    INSTALL_COMMAND ""
+    BUILD_IN_SOURCE ON
+    BUILD_COMMAND $(MAKE) ${wfa_MAKE_ARGS}
+)
+ExternalProject_Get_property(wfa-EXT SOURCE_DIR)
+set(WFA_INCLUDE_DIRS ${SOURCE_DIR})
+set(WFA_LINK_LIBRARIES ${SOURCE_DIR}/lib/libwfacpp.a)
+link_directories($SOURCE_DIR}/lib)
+MESSAGE(STATUS ${WFA_LINK_LIBRARIES})
+
+add_library(WAFCPP_STATIC_LIB STATIC IMPORTED)
+set_target_properties(WAFCPP_STATIC_LIB PROPERTIES IMPORTED_LOCATION ${WFA_LINK_LIBRARIES})
+add_dependencies(WAFCPP_STATIC_LIB wfa-EXT)
+
+add_custom_target(wfa
+    DEPENDS wfa-EXT
+    VERBATIM)
+
+include_directories(${WFA_INCLUDE_DIRS})
+
+set(vcflib_DEPS
+  CURL::libcurl
+  wfa
+)
+
+if (HTSLIB_LOCAL)
+  list(APPEND vcflib_DEPS htslib)
+endif()
+
+set(vcflib_LIBS
+  ${HTSLIB_LIBRARIES}
+  ${CURL_LIBRARIES}
+  ${ZLIB_LIBRARIES}
+  ${LIBLZMA_LIBRARIES}
+  ${BZIP2_LIBRARIES}
+  ${TABIXPP_LIBRARIES}
+  ${CMAKE_THREAD_LIBS_INIT}
+  ${WFA_LINK_LIBRARIES}
+  ${HTSLIB_LINK_LIBRARIES}
+)
+
+target_link_libraries(vcflib PUBLIC ${vcflib_LIBS})
+add_dependencies(vcflib ${vcflib_DEPS})
 
 # ---- Build all
 
 if (NOT BUILD_ONLY_LIB)
   foreach(BIN ${BINS})
     add_executable(${BIN} src/${BIN}.cpp)
-    target_include_directories(${BIN} PUBLIC ${TABIXPP_LIBRARIES} ${HTSLIB_INCLUDE_DIRS})
-    target_link_libraries(${BIN} vcflib tabixpp -DGIT_VERSION=0.9.0 ${TABIXPP_LIBRARIES} ${HTSLIB_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${ZLIB_LIBRARIES} ${LIBLZMA_LIBRARIES} ${BZIP2_LIBRARIES})
+    add_dependencies(${BIN} vcflib)
+    target_link_libraries(${BIN} PUBLIC vcflib ${vcflib_LIBS})
   endforeach(BIN ${BINS})
   install(TARGETS ${BINS} RUNTIME DESTINATION bin)
 
@@ -288,22 +431,24 @@ if (NOT BUILD_ONLY_LIB)
 
 endif()
 
-enable_testing()
+# ---- Python bindings - mostly for testing at this stage
+pybind11_add_module(pyvcflib "${CMAKE_SOURCE_DIR}/src/pythonffi.cpp")
+add_dependencies(pyvcflib ${vcflib_DEPS})
+target_link_libraries(pyvcflib PUBLIC vcflib "${vcflib_LIBS}")
+install(TARGETS pyvcflib LIBRARY DESTINATION lib)
 
 # ---- Test
 
-add_test(
-    NAME RunTests
-    COMMAND "make"
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
-)
+enable_testing()
 
 function(add_pytest TEST_FILE)
   add_test(
       NAME ${TEST_FILE}
-      COMMAND python3 pytest/${TEST_FILE}.py
+      COMMAND python3 tests/${TEST_FILE}.py
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
   )
+  SET_TESTS_PROPERTIES(${TEST_FILE}
+      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}")
 endfunction()
 
 function(add_pydoctest TEST_FILE)
@@ -312,7 +457,11 @@ function(add_pydoctest TEST_FILE)
       COMMAND python3 -m doctest -o NORMALIZE_WHITESPACE -o REPORT_UDIFF pytest/${TEST_FILE}.md
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
   )
+  SET_TESTS_PROPERTIES(${TEST_FILE}
+      # PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:symbolize=1;LSAN_OPTIONS=verbosity=2:log_threads=1:suppressions=../test/libasan-suppress.txt")
+      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build:${PROJECT_SOURCE_DIR}/test/pytest;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}")
 endfunction()
+
 
 function(add_doctest TEST_FILE)
   add_test(
@@ -330,8 +479,13 @@ function(add_pydoctest_fullname TEST_FILE)
   )
 endfunction()
 
-# add_pytest(vcf2tsv-test)
+add_pytest(realign)
+add_pydoctest(pyvcflib)
+add_pydoctest(vcflib-api)
 add_pydoctest(vcf2tsv)
+add_pydoctest(vcfallelicprimitives)
+add_pydoctest(vcfwave)
+add_pydoctest(vcfcreatemulti)
 add_pydoctest(vcfnulldotslashdot)
 add_doctest(doc/vcfintersect)
 add_doctest(doc/vcffilter)
@@ -347,17 +501,33 @@ add_doctest(doc/vcffilter)
 
 find_program(PANDOC pandoc)
 
+set(pytest vcfnulldotslashdot vcfallelicprimitives vcfwave vcfcreatemulti)
+
 if (PANDOC)
     # note the option ALL which allows to build the docs together with the application
     add_custom_target( man
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMAND ${PANDOC} ./test/pytest/vcfnulldotslashdot.md -s -t man -o ./man/vcfnulldotslashdot.1
         COMMAND ruby ./test/scripts/bin2md.rb --man test/scripts/bin2md-template.erb
         COMMAND ruby ./test/scripts/bin2md.rb --man --index
+        # overwrite markdown from tests
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfnulldotslashdot.md ./doc/vcfnulldotslashdot.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfallelicprimitives.md ./doc/vcfallelicprimitives.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfwave.md ./doc/vcfwave.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfcreatemulti.md ./doc/vcfcreatemulti.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcflib-api.md ./doc/vcflib-api.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/pyvcflib.md ./doc/pyvcflib.md
+        # generate man pages from markdown
         COMMAND ruby ./test/scripts/md2man
         # regenerate to allow for URLs in markdown docs
         COMMAND ruby ./test/scripts/bin2md.rb test/scripts/bin2md-template.erb
         COMMAND ruby ./test/scripts/bin2md.rb --index
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfnulldotslashdot.md ./doc/vcfnulldotslashdot.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfallelicprimitives.md ./doc/vcfallelicprimitives.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfwave.md ./doc/vcfwave.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfcreatemulti.md ./doc/vcfcreatemulti.md
+        # Documented test cases for Python bindings
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/pyvcflib.md ./doc/pyvcflib.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcflib-api.md ./doc/vcflib-api.md
     )
 else (PANDOC)
   message("Pandoc needs to be installed to generate the man pages")

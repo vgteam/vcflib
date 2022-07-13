@@ -2,13 +2,25 @@
 
 ### A C++ library for parsing and manipulating VCF files.
 
-[![Github-CI](https://github.com/vcflib/vcflib/workflows/CI/badge.svg)](https://github.com/vcflib/vcflib/actions?query=workflow%3ACI) [![Travis-CI](https://travis-ci.com/vcflib/vcflib.svg?branch=master)](https://travis-ci.com/github/vcflib/vcflib) [![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/installer/conda.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![GuixBadge](https://img.shields.io/badge/gnuguix-vcflib-brightgreen.svg)](https://www.gnu.org/software/guix/packages/V/) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
+[![Github-CI](https://github.com/vcflib/vcflib/workflows/CI/badge.svg)](https://github.com/vcflib/vcflib/actions?query=workflow%3ACI) [![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/installer/conda.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![GuixBadge](https://img.shields.io/badge/gnuguix-vcflib-brightgreen.svg)](https://www.gnu.org/software/guix/packages/V/) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
 
 Vcflib and related tools are the workhorses in bioinformatics for processing the VCF variant calling format. See
 
 Vcflib and tools for processing the VCF variant call format;
 Erik Garrison, Zev N. Kronenberg, Eric T. Dawson, Brent S. Pedersen, Pjotr Prins;
 doi: https://doi.org/10.1101/2021.05.21.445151
+
+## news
+
+May 2022: the [vcflib paper](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009123) has been published on PLoS Computational Biology!
+
+See below for the citation.
+
+April 2022: vcflib has just gone pangenome!
+
+By introducing the wavefront algorithm we can now realign long sequences and reduce call complexity (and FPs!) introduced by pangenome variant callers using the new [vcfwave](./doc/vcfwave.md) tool.
+
+See also [RELEASE_NOTES.md](./RELEASE_NOTES.md)
 
 ## overview
 
@@ -35,6 +47,8 @@ read and write VCF files.  Extensions and applications of the library
 provided in the included utilities (*.cpp) comprise the vast bulk of
 the library's utility.
 
+We have also added infrastructure to write Python bindings. See [below](#python).
+
 ---
 
 Short index:
@@ -49,11 +63,13 @@ Short index:
   * [Transformation](#transformation)
   * [Statistics](#statistics)
   * [Scripts](#scripts)
+  * [Python bindings](#python)
 - [Link library](#link-library)
 - [Build from source](#build-from-source)
 - [Development](#Development)
 - [LICENSE](#LICENSE)
 - [Credit work](#Credit)
+  * [Bibtex reference](#Bibtex-reference)
 
 ---
 
@@ -289,6 +305,10 @@ Click on the link to see the source code.
 | [vcfjoincalls](./scripts/vcfjoincalls) | overlay files using QUAL and GT from a second VCF |
 | [vcf2sqlite.py](./scripts/vcf2sqlite.py) | push VCF file into SQLite3 database using dbname |
 
+## python
+
+vcflib has rudimentary python bindings, but the are easy to build up on. See [pyvcflib](./test/pytest/pyvcflib.md).
+
 # Development
 
 ## build from source
@@ -300,7 +320,7 @@ of the sources make the files in the ./build directory with:
 git clone --recursive https://github.com/vcflib/vcflib.git
 cd vcflib
 mkdir -p build && cd build
-cmake ..
+cmake  -DCMAKE_BUILD_TYPE=Debug -DOPENMP=OFF ..
 cmake --build .
 cmake --install .
 ```
@@ -321,14 +341,17 @@ cd build
 cmake --build . --target clean
 ```
 
-Build dependencies can be viewed in the Travis-CI and github-CI
+Build dependencies can be viewed in the github-CI
 scripts (see badges above), as well as [guix.scm](./guix.scm) used by
 us to create the build environment (for instructions see the header of
 guix.scm). Essentially:
 
+- cmake
 - C++ compiler
 - htslib
 - tabixpp
+- WFA2
+- pybind11 (for testing)
 
 For include files add
 
@@ -345,7 +368,7 @@ And for some of the VCF executables
 
 Check out htslib in tabixpp (recursively) and
 
-    cmake -DHTSLIB_LOCAL:STRING=./tabixpp/htslib/ ..
+    cmake -DHTSLIB_LOCAL:STRING=./htslib/ ..
     cmake --build .
 
 ## link library
@@ -377,6 +400,13 @@ cd test
 python3 -m doctest -o NORMALIZE_WHITESPACE -o REPORT_UDIFF pytest/vcf2tsv.md
 ```
 
+We also added support for python bindings and unit tests. See [realign.py](./test/tests/realign.py) for an example.
+
+# Support
+
+The developers are on the vcflib
+[matrix channel](https://matrix.to/#/#vcflib:matrix.org). Please do not use the github issue tracker for support issues!
+
 # Contributing
 
 To contribute code to vcflib send a github pull request. We may ask
@@ -397,6 +427,26 @@ Erik Garrison, Zev N. Kronenberg, Eric T. Dawson, Brent S. Pedersen, Pjotr Prins
 doi: https://doi.org/10.1101/2021.05.21.445151
 
 ## Bibtex reference
+
+Please cite:
+[A spectrum of free software tools for processing the VCF variant call format: vcflib, bio-vcf, cyvcf2, hts-nim and slivar](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009123).
+
+```bibtex
+@article{10.1371/journal.pcbi.1009123,
+    doi = {10.1371/journal.pcbi.1009123},
+    author = {Garrison, Erik AND Kronenberg, Zev N. AND Dawson, Eric T. AND Pedersen, Brent S. AND Prins, Pjotr},
+    journal = {PLOS Computational Biology},
+    publisher = {Public Library of Science},
+    title = {A spectrum of free software tools for processing the VCF variant call format: vcflib, bio-vcf, cyvcf2, hts-nim and slivar},
+    year = {2022},
+    month = {05},
+    volume = {18},
+    url = {https://doi.org/10.1371/journal.pcbi.1009123},
+    pages = {1-15}
+}
+```
+
+Below the prepublished version of our paper
 
 ```bibtex
 @article {Garrison2021.05.21.445151,

@@ -9,6 +9,18 @@
 ;; For the tests you need /usr/bin/env. In a container create it with
 ;;
 ;;   mkdir -p /usr/bin ; ln -s $GUIX_ENVIRONMENT/bin/env /usr/bin/env
+;;
+;; or in one go
+;;
+;;   guix shell -C -D -f guix.scm -- bash --init-file <(echo "mkdir -p /usr/bin && ln -s \$GUIX_ENVIRONMENT/bin/env /usr/bin/env")
+;;
+;;   cmake  -DCMAKE_BUILD_TYPE=Debug -DOPENMP=OFF -DASAN=ON ..
+;;   cmake  -DCMAKE_BUILD_TYPE=Debug ..
+;;   cmake --build .
+;;
+;; debug example
+;;
+;;   env LD_LIBRARY_PATH=$GUIX_ENVIRONMENT/lib gdb --args vcfallelicprimitives -m ../samples/10158243.vcf
 
 
 (use-modules
@@ -18,21 +30,25 @@
   (guix git-download)
   (guix build-system cmake)
   (gnu packages algebra)
+  (gnu packages autotools)
   (gnu packages base)
   (gnu packages compression)
   (gnu packages bioinformatics)
   (gnu packages build-tools)
+  (gnu packages check)
   (gnu packages curl)
   (gnu packages gcc)
-  (gnu packages haskell-xyz) ; pandoc
+  (gnu packages gdb)
+  (gnu packages haskell-xyz) ; pandoc for help files
   (gnu packages llvm)
-  (gnu packages python)
-  ;; (gnu packages ninja)
   (gnu packages parallel)
   (gnu packages perl)
   (gnu packages perl6)
   (gnu packages pkg-config)
+  (gnu packages python)
+  (gnu packages python-xyz) ; for pybind11
   (gnu packages ruby)
+  (gnu packages tls)
   (srfi srfi-1)
   (ice-9 popen)
   (ice-9 rdelim))
@@ -49,13 +65,19 @@
     (source (local-file %source-dir #:recursive? #t))
     (build-system cmake-build-system)
     (inputs
-     `(("curl" ,curl)
+     `(("autoconf" ,autoconf) ;; htslib build requirement
+       ("automake" ,automake) ;; htslib build requirement
+       ("openssl" ,openssl) ;; htslib build requirement
+       ("curl" ,curl) ;; htslib build requirement
        ("fastahack" ,fastahack)
-       ("gcc" ,gcc-11)    ;; test against latest
+       ;; ("gcc" ,gcc-11)    ;; test against latest
+       ("gdb" ,gdb)
        ("htslib" ,htslib)
        ("pandoc" ,pandoc) ;; for generation man pages
        ("perl" ,perl)
        ("python" ,python)
+       ("python-pytest" ,python-pytest)
+       ("pybind11" ,pybind11)
        ("ruby" ,ruby) ;; for generating man pages
        ("smithwaterman" ,smithwaterman)
        ("tabixpp" ,tabixpp)
