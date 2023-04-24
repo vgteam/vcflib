@@ -1,3 +1,14 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+
+    Note this file is obsolete, see 1b5f1b4be67226501357ec788e8cd37c0f0a9faa
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include "convert.h"
@@ -5,7 +16,7 @@
 #include <iostream>
 #include <set>
 #include <sys/time.h>
-#include "fsom/fsom.h"
+#include <fsom/fsom.h>
 #include <getopt.h>
 #include <cmath>
 
@@ -205,7 +216,8 @@ void printSummary(char** argv) {
          << "    -T, --paint-true VCF   use VCF file to annotate true variants (multiple)" << endl
          << "    -F, --paint-false VCF  use VCF file to annotate false variants (multiple)" << endl
          << "    -R, --paint-tag TAG    provide estimated FDR% in TAG in variant INFO" << endl
-         << "    -N, --false-negative   replace FDR% (false detection) with FNR% (false negative)" << endl;
+         << "    -N, --false-negative   replace FDR% (false detection) with FNR% (false negative)" << endl << endl;
+  cerr << "This code is deprecated!" << endl << endl;
 
 }
 
@@ -239,7 +251,7 @@ int main(int argc, char** argv) {
 
     while (true) {
         static struct option long_options[] =
-        {  
+        {
             /* These options set a flag. */
             //{"verbose", no_argument,       &verbose_flag, 1},
             {"help", no_argument, 0, 'h'},
@@ -311,7 +323,7 @@ int main(int argc, char** argv) {
                 som_file = optarg;
                 apply = true;
                 break;
-                
+
             case 's':
                 som_file = optarg;
                 train = true;
@@ -378,7 +390,7 @@ int main(int argc, char** argv) {
     }
 
     if (debug) start_timer();
-    
+
     vector<Variant> variants;
     if (train) {
         map<string, pair<double, double> > normalizationLimits;
@@ -460,7 +472,7 @@ int main(int argc, char** argv) {
     } else {
 
         net = som_network_new(data[0].size(), height, width);
-	
+
         if ( !net )	{
             printf( "ERROR: som_network_new failed.\n" );
             return 1;

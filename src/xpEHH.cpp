@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include "cdflib.hpp"
@@ -323,7 +332,7 @@ int main(int argc, char** argv) {
 
     vector<int> target_h, background_h;
 
-    int index, indexi = 0;
+    int index = 0, indexi = 0;
 
     for(vector<string>::iterator samp = samples.begin(); samp != samples.end(); samp++){
 
@@ -390,29 +399,29 @@ int main(int argc, char** argv) {
 	sindex += 1;
       }
       
-      genotype * populationTarget    ;
-      genotype * populationBackground;
-      genotype * populationTotal     ;
+      unique_ptr<genotype> populationTarget    ;
+      unique_ptr<genotype> populationBackground;
+      unique_ptr<genotype> populationTotal     ;
       
       if(type == "PL"){
-	populationTarget     = new pl();
-	populationBackground = new pl();
-	populationTotal      = new pl();
+	populationTarget     = makeUnique<pl>();
+	populationBackground = makeUnique<pl>();
+	populationTotal      = makeUnique<pl>();
       }
       if(type == "GL"){
-	populationTarget     = new gl();
-	populationBackground = new gl();
-	populationTotal      = new gl();
+	populationTarget     = makeUnique<gl>();
+	populationBackground = makeUnique<gl>();
+	populationTotal      = makeUnique<gl>();
       }
       if(type == "GP"){
-	populationTarget     = new gp();
-	populationBackground = new gp();
-	populationTotal      = new gp();
+	populationTarget     = makeUnique<gp>();
+	populationBackground = makeUnique<gp>();
+	populationTotal      = makeUnique<gp>();
       }
       if(type == "GT"){
-	populationTarget     = new gt();
-        populationBackground = new gt();
-        populationTotal      = new gt();
+	populationTarget     = makeUnique<gt>();
+        populationBackground = makeUnique<gt>();
+        populationTotal      = makeUnique<gt>();
       }
       
       populationTarget->loadPop(target,         var.sequenceName, var.position);
@@ -423,20 +432,14 @@ int main(int argc, char** argv) {
       
       
 //      if(populationTotal->af > 0.99 || populationTotal->af < 0.01){
+//
 //	
-//	delete populationTarget;
-//	delete populationBackground;
-//	delete populationTotal;
 //	continue;
 //      }
 
       afs.push_back(populationTotal->af);
       positions.push_back(var.position);
       loadPhased(haplotypes, populationTotal, nsamples);
-      
-      delete populationTarget;
-      delete populationBackground;
-      delete populationTotal;
 
     }
 

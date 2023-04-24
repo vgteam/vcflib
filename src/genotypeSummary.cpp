@@ -1,8 +1,18 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include "cdflib.hpp"
 #include "pdflib.hpp"
 #include "var.hpp"
+#include "makeUnique.h"
 
 #include <string>
 #include <iostream>
@@ -31,7 +41,7 @@ void printHelp(void){
   cerr << endl << endl;
   cerr << "INFO: help" << endl;
   cerr << "INFO: description:" << endl;
-  cerr << "      Summarizes genotype counts for bi-allelic SNVs and indel " << endl;
+  cerr << "Generates a table of genotype counts. Summarizes genotype counts for bi-allelic SNVs and indel " << endl << endl;
 
   cerr << "INFO: output: table of genotype counts for each individual." << endl;
 
@@ -44,6 +54,7 @@ void printHelp(void){
   cerr << "INFO: optional, r,region     -- a tabix compliant region : chr1:1-1000 or chr1                                              " << endl;
   cerr << "INFO: optional, s,snp        -- Only count SNPs                                              " << endl;
   cerr << "INFO: optional, a,ancestral  -- describe counts relative to the ancestral allele defined as AA in INFO" << endl;
+  cerr << endl << "Type: statistics" << endl << endl;
 
   printVersion();
 }
@@ -83,7 +94,7 @@ int main(int argc, char** argv) {
 
   string filename;
 
-  // open standardout 
+  // open standardout
 
   // set region to scaffold
 
@@ -190,7 +201,7 @@ int main(int argc, char** argv) {
       printHelp();
     }
 
-    bool is_open; 
+    bool is_open;
 
     if (filename == "-") {
 
@@ -198,10 +209,10 @@ int main(int argc, char** argv) {
 
     } else {
 
-    	is_open=variantFile.open(filename); 
-	
+    	is_open=variantFile.open(filename);
+
      }
-    
+
     if (!is_open)  {
           cerr << "FATAL: could not open file for reading" << endl;
           printHelp();
@@ -249,7 +260,7 @@ int main(int argc, char** argv) {
 
     for ( map<int ,int>::iterator x=it.begin(); x!=it.end(); ++x) {
 
-        countDataSampleName.push_back(samples[x->first] ); 
+        countDataSampleName.push_back(samples[x->first] );
     }
 
 
@@ -317,22 +328,24 @@ int main(int argc, char** argv) {
 	    index += 1;
 	}
 
-	genotype * populationTarget      ;
+  using Detail::makeUnique;
+
+	unique_ptr<genotype> populationTarget      ;
 
 	if(type == "PL"){
-	  populationTarget     = new pl();
+	  populationTarget     = makeUnique<pl>();
 	}
 	if(type == "GL"){
-	  populationTarget     = new gl();
+	  populationTarget     = makeUnique<gl>();
 	}
 	if(type == "GP"){
-	  populationTarget     = new gp();
+	  populationTarget     = makeUnique<gp>();
 	}
 	if(type == "GT"){
-          populationTarget     = new gt();
+    populationTarget     = makeUnique<gt>();
 	}
 
-	populationTarget->loadPop(target, var.sequenceName, var.position);
+	populationTarget->loadPop(target, var.position);
 
 	for(int i = 0; i < populationTarget->genoIndex.size() ; i++){
 	  if(populationTarget->genoIndex[i] == -1){
@@ -356,13 +369,13 @@ int main(int argc, char** argv) {
             }
 	  }
 	  else{
-	    std::cerr << "FATAL: unkown genotype index" << std::endl;
+	    std::cerr << "FATAL: unknown genotype index" << std::endl;
 cerr << populationTarget->genoIndex[i] << endl;
 cerr << var << endl;
 	    exit(1);
 	  }
 	}
-	delete populationTarget;
+	;
 
     }
 

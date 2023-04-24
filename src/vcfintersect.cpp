@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "BedReader.h"
 #include "IntervalTree.h"
@@ -10,11 +19,11 @@
 using namespace std;
 using namespace vcflib;
 
-
 void printSummary(char** argv) {
-    cerr << "usage: " << argv[0] << " [options] [<vcf file>]" << endl
+  cerr << "vcflib " << VCFLIB_VERSION << " set analysis" << endl << endl
+       << "usage: vcfintersect [options] [<vcf file>]" << endl
          << endl
-         << "options:" << endl 
+         << "options:" << endl
          << "    -b, --bed FILE            use intervals provided by this BED file" << endl
          << "    -R, --region REGION       use 1-based tabix-style region (e.g. chrZ:10-20), multiples allowed" << endl
          << "    -S, --start-only          don't use the reference length information in the record to determine" << endl
@@ -36,8 +45,9 @@ void printSummary(char** argv) {
          << endl
          << "For bed-vcf intersection, alleles which fall into the targets are retained." << endl
          << endl
-         << "For vcf-vcf intersection and union, unify on equivalent alleles within window-size bp" << endl
-         << "as determined by haplotype comparison alleles." << endl;
+         << "Haplotype aware intersection, union and complement. Use for intersection and union of VCF files: unify on equivalent alleles within window-size bp" << endl
+       << "as determined by haplotype comparison alleles." << endl << endl
+         << "type: transformation" << endl;
 	//<< "Intersect the records in the VCF file with targets provided in a BED file." << endl
 	//<< "Intersections are done on the reference sequences in the VCF file." << endl
 	//<< "If no VCF filename is specified on the command line (last argument) the VCF" << endl
@@ -208,7 +218,7 @@ int main(int argc, char** argv) {
     if (!bedFileName.empty()) {
         usingBED = true;
     }
-    
+
     if (usingBED || !regions.empty()) {
         variantFile.parseSamples = false;
     }
@@ -262,7 +272,7 @@ int main(int argc, char** argv) {
         VariantFieldType mergeFromType = f->second;
         stringstream s;
         s << mergeFromType;
-        
+
         variantFile.addHeaderLine("##INFO=<ID="+ mergeToTag +",Number=A,Type=" + s.str() + ",Description=\"The value of " + mergeFromTag + " in " + vcfFileName  +  " '.' if the tag does not exist for the given allele in the other file, or if there is no corresponding allele.\">");
     }
 
@@ -570,4 +580,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

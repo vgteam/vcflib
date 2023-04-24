@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <getopt.h>
@@ -8,11 +17,12 @@ using namespace vcflib;
 void printSummary(char** argv) {
     cerr << "usage: " << argv[0] << " [options] <vcf file>" << endl
          << endl
-         << "options:" << endl 
+         << "Set genotypes using the maximum genotype likelihood for each sample." << endl
+         << "options:" << endl
          << "    -n, --fix-null-genotypes   only apply to null and partly-null genotypes" << endl
          << endl
-         << "Set genotypes using the maximum genotype likelihood for each sample." << endl
          << endl;
+    cerr << endl << "Type: transformation" << endl << endl;
     exit(0);
 }
 
@@ -41,7 +51,7 @@ int main(int argc, char** argv) {
       /* Detect the end of the options. */
           if (c == -1)
             break;
- 
+
           switch (c)
             {
             case 0:
@@ -57,7 +67,7 @@ int main(int argc, char** argv) {
           case 'n':
 	      fixNull = true;
 	      break;
- 
+
           case 'h':
             printSummary(argv);
             exit(0);
@@ -68,7 +78,7 @@ int main(int argc, char** argv) {
             printSummary(argv);
             exit(1);
             break;
- 
+
           default:
             abort ();
           }
@@ -142,7 +152,7 @@ int main(int argc, char** argv) {
                         maxindex = i; // prefers == gls in order of listing
                     }
                 }
-		
+
                 // determine which genotype it represents
                 // modify, if the GT is part-null
                 vector<string>& gtv = g->second;
@@ -168,4 +178,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

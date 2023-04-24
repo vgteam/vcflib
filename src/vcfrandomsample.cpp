@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "BedReader.h"
 #include <getopt.h>
@@ -13,7 +22,7 @@ using namespace vcflib;
 void printSummary(char** argv) {
     cerr << "usage: " << argv[0] << " [options] [<vcf file>]" << endl
          << endl
-         << "options:" << endl 
+         << "options:" << endl
          << "    -r, --rate RATE          base sampling probability per locus" << endl
          << "    -s, --scale-by KEY       scale sampling likelihood by this Float info field" << endl
          << "    -p, --random-seed N      use this random seed (by default read from /dev/random)" << endl
@@ -22,6 +31,8 @@ void printSummary(char** argv) {
          << "Randomly sample sites from an input VCF file, which may be provided as stdin." << endl
          << "Scale the sampling probability by the field specified in KEY.  This may be" << endl
          << "used to provide uniform sampling across allele frequencies, for instance." << endl;
+    cerr << endl << "Type: statistics" << endl << endl;
+
     exit(0);
 }
 
@@ -126,7 +137,7 @@ int main(int argc, char** argv) {
     variantFile.addHeaderLine(liness.str());
 
     cout << variantFile.header << endl;
-    
+
     // check that we can use the scaling key
     if (!scaleByKey.empty()) {
         if (variantFile.infoTypes.find(scaleByKey) == variantFile.infoTypes.end()) {
@@ -145,7 +156,7 @@ int main(int argc, char** argv) {
         double randN = genrand_real1();
         if (!scaleByKey.empty()) {
             if (var.info.find(scaleByKey) != var.info.end()) {
-                double val;
+                double val = 0;
 
                 // hack, sum the values of interest if we have multiple values
                 // really, this is only suitable for AF stuff

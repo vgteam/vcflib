@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 // not to complicate the issue but I need a different variant object to handle populations. 
 
 #ifndef __VAR_H
@@ -31,7 +40,7 @@ public:
   double alpha; 
   double beta ;
 
-  virtual void loadPop(vector< map< string, vector<string> > >& group, string seqid, long int position) = 0;
+  virtual void loadPop(vector< map< string, vector<string> > >& group, long int position) = 0;
   virtual void estimatePosterior() = 0 ;
   virtual ~zvar() = 0;
   void setPopName(string  popName);
@@ -50,12 +59,12 @@ public:
   double hfrq ;
   
   vector<int> genoIndex;
-  vector<string> gts ;
+  vector<string> gts;
   vector< vector < double > > genoLikelihoods;
   vector< vector < double > > genoLikelihoodsCDF;
 
   virtual double unphred(map< string, vector<string> > & geno, int index) = 0; 
-  virtual void loadPop(vector< map< string, vector<string> > >& group, string seqid, long int position);
+  virtual void loadPop(vector< map< string, vector<string> > >& group, long int position);
   virtual ~genotype() = 0;
   void estimatePosterior();
   
@@ -72,7 +81,7 @@ public:
   vector<double> nrefs;
   vector<double> afs  ; 
 
-  void loadPop(vector< map< string, vector<string> > >& group, string seqid, long int position);
+  void loadPop(vector< map< string, vector<string> > >& group, long int position);
   void estimatePosterior();
 
   ~pooled();

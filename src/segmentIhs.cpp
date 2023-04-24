@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 
 /*
 
@@ -80,7 +89,7 @@ void printHelp(void){
   cerr << endl;
   cerr << "INFO: required: -f            -- Output from normalizeIHS     "   << endl;
   cerr << "INFO: optional: -s            -- High absolute iHS cutoff [2] "    << endl;
-
+  cerr << endl << "Type: statistics" << endl << endl;
   cerr << endl;
 
   printVersion();
@@ -96,7 +105,7 @@ int parseOpts(int argc, char** argv)
       switch(opt){
       case 's':
 	{
-	  string op = optarg;    
+	  string op = optarg;
 	  globalOpts.cut = atof(op.c_str());
 	  break;
 	}
@@ -106,7 +115,7 @@ int parseOpts(int argc, char** argv)
 	  exit(1);
 	  break;
 	}
-	
+
       case 'f':
 	{
 	  globalOpts.file = optarg;
@@ -116,8 +125,8 @@ int parseOpts(int argc, char** argv)
 	{
 	  break;
 	}
-      }	
-	opt = getopt( argc, argv, optString ); 
+      }
+	opt = getopt( argc, argv, optString );
    }
 return 1;
 }
@@ -131,10 +140,10 @@ return 1;
 
 */
 
-bool growWindow(vector<double> & values, 
-		int * begin            , 
-		int * end              , 
-		int * nhigh            , 
+bool growWindow(vector<double> & values,
+		int * begin            ,
+		int * end              ,
+		int * nhigh            ,
 		int * nlow             ,
 		double * hSum          ,
 		double * lSum           ){
@@ -178,7 +187,7 @@ bool growWindow(vector<double> & values,
 
 void process(vector<int> & pos, vector<double> & value, vector<string> & seqid)
 {
-  
+
 
   // i is the index of the outter loop/aka variant sites.
   // always start the seed with 9 SNPs the window grows to 10 in "growWindow"
@@ -186,16 +195,16 @@ void process(vector<int> & pos, vector<double> & value, vector<string> & seqid)
 
     int begin = i -9;
     int end   = i +9;
-    
+
     int nHigh = 0;
     int nLow  = 0;
-    
+
     double HighSum = 0;
     double LowSum  = 0;
 
     bool anyGroth = false;
-    
-    while(growWindow(value, &begin, &end, 
+
+    while(growWindow(value, &begin, &end,
 		     &nHigh, &nLow, &HighSum, &LowSum)){
       anyGroth = true;
     }
@@ -224,9 +233,9 @@ void process(vector<int> & pos, vector<double> & value, vector<string> & seqid)
            << nHigh + nLow   << "\t"
            << nHigh          << "\t"
            << (pos[end] - pos[begin])
-           << endl;      
+           << endl;
 
-    } 
+    }
   }
 }
 
@@ -279,7 +288,7 @@ int main( int argc, char** argv)
 	    lastPos = atoi(lineDat[1].c_str());
 	    seqid.push_back(lineDat[0]);
 	    pos.push_back(atoi(lineDat[1].c_str()));
-	    value.push_back(abs(atof(lineDat[6].c_str())));	  
+	    value.push_back(abs(atof(lineDat[6].c_str())));
 	  }
 	}
 

@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <string>
@@ -10,8 +19,9 @@ using namespace vcflib;
 int main(int argc, char** argv) {
 
     if (argc < 3) {
-        cerr << "usage: " << argv[0] << " <vcf file> [FIELD1] [FIELD2] ..." << endl
-             << "outputs each record in the vcf file, removing INFO fields not listed on the command line" << endl;
+      cerr << "usage: " << argv[0] << " <vcf file> [FIELD1] [FIELD2] ..." << endl << endl
+             << "To decrease file size remove INFO fields not listed on the command line" << endl;
+      cerr << endl << "Type: transformation" << endl << endl;
         return 1;
     }
 
@@ -46,17 +56,17 @@ int main(int argc, char** argv) {
 
     // write the header
     cout << variantFile.header << endl;
- 
+
     // print the records, filtering is done via the setting of varA's output sample names
     while (variantFile.getNextVariant(var)) {
         for (map<string, vector<string> >::iterator i = var.info.begin(); i != var.info.end(); ++i) {
             if (!fieldsToKeep.count(i->first)) {
-                var.info.erase(i->first);
+                i = var.info.erase(i);
             }
         }
         for (map<string, bool>::iterator i = var.infoFlags.begin(); i != var.infoFlags.end(); ++i) {
             if (!fieldsToKeep.count(i->first)) {
-                var.infoFlags.erase(i->first);
+                i = var.infoFlags.erase(i);
             }
         }
         cout << var << endl;
@@ -65,4 +75,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

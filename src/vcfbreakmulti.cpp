@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "convert.h"
 #include <set>
@@ -18,6 +27,7 @@ void printSummary(char** argv) {
 	 << endl
 	 << "If multiple alleles are specified in a single record, break the record into" << endl
 	 << "multiple lines, preserving allele-specific INFO fields." << endl;
+    cerr << endl << "Type: transformation" << endl << endl;
     exit(0);
 }
 
@@ -111,4 +121,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

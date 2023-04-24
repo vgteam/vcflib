@@ -1,4 +1,14 @@
 /*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2015      Zev N. Kronenberg
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
+/*
 
 This program was created at:  Fri Apr 17 14:59:53 2015
 This program was created by:  Zev N. Kronenberg
@@ -122,6 +132,7 @@ void printHelp()
   cerr << "        2. The number of trials                               " << endl;
   cerr << "        3. The empirical p-value                              " << endl;
   cerr << endl;
+  cerr << endl << "Type: statistics" << endl << endl;
   printVersion();
 
 }
@@ -135,6 +146,15 @@ int parseOpts(int argc, char** argv)
 
   globalOpts.nsuc         = 1;
   globalOpts.npermutation = 1000;
+
+  if (argc == 2) {
+    string h_flag = argv[1];
+
+    if (argc == 2 && (h_flag == "-h" || h_flag == "--help")) {
+      printHelp();
+      exit(1);
+    }
+  }
 
   opt = getopt(argc, argv, optString);
   while(opt != -1){
@@ -356,7 +376,7 @@ int parse = parseOpts(argc, argv);
    }
  }
  else{
-   cerr << "FATAL: coult not open file: " << globalOpts.file << endl;
+   cerr << "FATAL: could not open file: " << globalOpts.file << endl;
    exit(1);
  }
 

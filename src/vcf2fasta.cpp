@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "convert.h"
 #include "join.h"
@@ -60,17 +69,25 @@ public:
 };
 
 void printSummary(char** argv) {
-    cerr << "usage: " << argv[0] << " [options] [file]" << endl
-         << endl
-         << "options:" << endl
-         << "    -f, --reference REF     Use this reference when decomposing samples." << endl
-         << "    -p, --prefix PREFIX     Affix this output prefix to each file, none by default" << endl
-         << "    -P, --default-ploidy N  Set a default ploidy for samples which do not have information in the first record (2)." << endl
-         << endl
-         << "Outputs sample_seq:N.fa for each sample, reference sequence, and chromosomal copy N in [0,1... ploidy]." << endl
-         << "Each sequence in the fasta file is named using the same pattern used for the file name, allowing them to be combined." << endl;
-        //<< "Impossible regions of haplotypes are noted with an error message.  The corresponding" << endl
-        //<< "regions of the output FASTA files will be marked as N." << endl
+    cout << "usage: " << argv[0] << " [options] [file]";
+    std::string text = R"(
+
+Generates sample_seq:N.fa for each sample, reference sequence, and
+chromosomal copy N in [0,1... ploidy]. Each sequence in the fasta file
+is named using the same pattern used for the file name, allowing them
+to be combined.
+
+options:
+    -f, --reference REF     Use this reference when decomposing samples.
+    -p, --prefix PREFIX     Affix this output prefix to each file, none by default
+    -P, --default-ploidy N  Set a default ploidy for samples which do not have
+                            information in the first record (2).
+    -n VAL                  Set string value to output for missing calls
+
+Type: transformation
+)";
+
+    cout << text;
     exit(0);
 }
 
@@ -167,7 +184,7 @@ void vcf2fasta(VariantCallFile& variantFile, FastaReference& reference, string& 
                 if( *g == NULL_ALLELE ){
                     if( nullAlleleString == "" ){
                         cerr << "empty genotype call for sample " << *s << " at " << var.sequenceName << ":" << var.position << endl;
-                        cerr << "use -n option to set value to output for missing calls" << endl; 
+                        cerr << "use -n option to set value to output for missing calls" << endl;
                         exit(1);
                     }else{
                         outputs[sample].at(i)->write(nullAlleleString);
@@ -242,7 +259,7 @@ int main(int argc, char** argv) {
             defaultPloidy = atoi(optarg);
             break;
 
-	    case 'n':
+        case 'n':
             nullAlleleString = optarg;
             break;
 
@@ -280,4 +297,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

@@ -1,919 +1,488 @@
-# vcflib 
+# vcflib
+
 ### A C++ library for parsing and manipulating VCF files.
 
-#### author: Erik Garrison <erik.garrison@bc.edu>
+[![Github-CI](https://github.com/vcflib/vcflib/workflows/CI/badge.svg)](https://github.com/vcflib/vcflib/actions?query=workflow%3ACI) [![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/version.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![GuixBadge](https://img.shields.io/badge/gnuguix-vcflib-brightgreen.svg)](https://www.gnu.org/software/guix/packages/V/) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
 
-#### license: MIT
+Vcflib and related tools are the workhorses in bioinformatics for processing the VCF variant calling format. See
 
-[![Gitter](https://badges.gitter.im/ekg/vcflib.svg)](https://gitter.im/ekg/vcflib?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/vcflib/vcflib.svg?branch=master)](https://travis-ci.org/vcflib/vcflib)
----
+[A spectrum of free software tools for processing the VCF variant call format: vcflib, bio-vcf, cyvcf2, hts-nim and slivar](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009123).
+Garrison E, Kronenberg ZN, Dawson ET, Pedersen BS, Prins P (2022), PLoS Comput Biol 18(5): e1009123. https://doi.org/10.1371/journal.pcbi.1009123
+
+(bibtex reference at the end of this page)
+
+## news
+
+![Humpty Logo - CC0 license](./logos/humpty-dumpty.jpg)
+
+**January 2023**: this is vcflib's first *Humpty Dumpty* release: [vcfcreatemulti](./doc/vcfcreatemulti.md) is the natural companion to [vcfwave](./doc/vcfwave.md).
+Often variant callers are not perfect.
+**vcfwave** with its companion tool **vcfcreatemulti** can take an existing VCF file that contains multiple complex overlapping and even nested alleles and, unlike Humpty Dumpty, take them apart and put them together again.
+Thereby, hopefully, creating sane VCF output that is useful for analysis and getting rid of false positives.
+
+We created these tools by including the state-of-the-art [biWFA](https://github.com/smarco/WFA2-lib) wavefront aligner.
+The tools are particularly useful for the output from structural variation callers and pangenome genotypers, such as used by the Human Pangenome Reference Consortium (HPRC) because of overlapping ALT segments.
+
+See also [RELEASE_NOTES.md](./RELEASE_NOTES.md)
+
+**May 2022**: the [vcflib paper](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009123) has been published on PLoS Computational Biology!
+
+**April 2022**: vcflib has just gone pangenome!
+
+By introducing the wavefront algorithm we can now realign long sequences and reduce call complexity (and FPs!) introduced by pangenome variant callers using the new [vcfwave](./doc/vcfwave.md) tool.
+
+See also [RELEASE_NOTES.md](./RELEASE_NOTES.md)
 
 ## overview
 
-The [Variant Call Format (VCF)](http://www.1000genomes.org/wiki/Analysis/Variant%20Call%20Format/vcf-variant-call-format-version-41)
-is a flat-file, tab-delimited textual format
-intended to concisely describe reference-indexed variations between individuals. 
-VCF provides a common interchange format for the description of variation in individuals and populations of samples,
-and has become the _defacto_ standard reporting format for a wide array of genomic variant detectors.
-
-vcflib provides methods to manipulate and interpret sequence variation as it can be described by VCF.
-It is both:
-
- * an API for parsing and operating on records of genomic variation as it can be described by the VCF format,
- * and a collection of command-line utilities for executing complex manipulations on VCF files.
-
-The API itself provides a quick and extremely permissive method to read and write VCF files.
-Extensions and applications of the library provided in the included utilities (*.cpp) comprise the vast bulk of the library's utility for most users.
-
-## download and install 
-
-1. Under the repository name, click to copy the clone URL for the repository. ![](https://help.github.com/assets/images/help/repository/clone-repo-clone-url-button.png)
-
-2. Go to the location where you want the cloned directory to be made:  `cd <PathWhereIWantToCloneVcflib>`
-
-3. Type `git clone --recursive`, and then paste the URL you copied in Step 1.
-
-4. Enter the cloned directory and type `make` to compile the programs.  If you want to use threading type `make openmp` instead of `make`.  Only a few VCFLIB tools are threaded.
-
-5. Once make is finished the executables are ready in the folder `<PathWhereIWantToCloneVcflib>/vcflib/bin/`. Set this path as an  environment variable in the .bashrc file to access executables form everywhere on your proile OR call the executables from the path where they are. 
-
-
-## usage
-
-vcflib provides a variety of functions for VCF manipulation:
-
-### comparison
-
- * Generate **haplotype-aware intersections** ([vcfintersect](#vcfintersect) -i), **unions** (vcfintersect -u), and **complements** (vcfintersect -v -i).
- * **Overlay-merge** multiple VCF files together, using provided order as precedence ([vcfoverlay](#vcfoverlay)).
- * **Combine** multiple VCF files together, handling samples when alternate allele descriptions are identical ([vcfcombine](#vcfcombine)).
- * **Validate** the integrity and identity of the VCF by verifying that the VCF record's REF matches a given reference file ([vcfcheck](#vcfcheck)).
-
-### format conversion
-
- * Convert a VCF file into a per-allele or per-genotype **tab-separated (.tsv)** file ([vcf2tsv](#vcf2tsv)).
- * Store a VCF file in an **SQLite3** database (vcf2sqlite.py).
- * Make a **BED file** from the intervals in a VCF file (vcf2bed.py).
-
-### filtering and subsetting
-
- * **Filter** variants and genotypes using arbitrary expressions based on values in the INFO and sample fields ([vcffilter](#vcffilter)).
- * **Randomly sample** a subset of records from a VCF file, given a rate ([vcfrandomsample](#vcfrandomsample)).
- * **Select variants** of a certain type (vcfsnps, vcfbiallelic, vcfindels, vcfcomplex, etc.)
-
-### annotation
-
- * **Annotate** one VCF file with fields from the INFO column of another, based on position ([vcfaddinfo](#vcfaddinfo), [vcfintersect](#vcfintersect)).
- * Incorporate annotations or targets provided by a *BED* file ([vcfannotate](#vcfannotate), [vcfintersect](#vcfintersect)).
- * Examine **genotype correspondence** between two VCF files by annotating samples in one file with genotypes from another ([vcfannotategenotypes](#vcfannotategenotypes)).
- * Annotate variants with the **distance** to the nearest variant ([vcfdistance](#vcfdistance)).
- * Count the number of alternate alleles represented in samples at each variant record ([vcfaltcount](#vcfaltcount)).
- * **Subset INFO fields** to decrease file size and processing time ([vcfkeepinfo](#vcfkeepinfo)).
- * Lighten up VCF files by keeping only a **subset of per-sample information** ([vcfkeepgeno](#vcfkeepgeno)).
- * **Numerically index** alleles in a VCF file ([vcfindex](#vcfindex)).
-
-### samples
-
- * Quickly obtain the **list of samples** in a given VCF file ([vcfsamplenames](#vcfsamplenames)).
- * **Remove samples** from a VCF file ([vcfkeepsamples](#vcfkeepsamples), [vcfremovesamples](#vcfremovesamples)).
-
-### ordering
-
- * **Sort variants** by genome coordinate ([vcfstreamsort](#vcfstreamsort)).
- * **Remove duplicate** variants in vcfstreamsort'ed files according to their REF and ALT fields ([vcfuniq](#vcfuniq)).
-
-### variant representation
-
- * **Break multiallelic** records into multiple records ([vcfbreakmulti](#vcfbreakmulti)), retaining allele-specific INFO fields.
- * **Combine overlapping biallelic** records into a single record ([vcfcreatemulti](#vcfcreatemulti)).
- * **Decompose complex variants** into a canonical SNP and indel representation ([vcfallelicprimitives](#vcfallelicprimitives)), generating phased genotypes for available samples.
- * **Reconstitute complex variants** provided a phased VCF with samples ([vcfgeno2haplo](#vcfgeno2haplo)).
- * **Left-align indel and complex variants** ([vcfleftalign](#vcfleftalign)).
-
-### genotype manipulation
-
- * **Set genotypes** in a VCF file provided genotype likelihoods in the GL field ([vcfglxgt](#vcfglxgt)).
- * Establish putative **somatic variants** using reported differences between germline and somatic samples ([vcfsamplediff](#vcfsamplediff)).
- * Remove samples for which the reported genotype (GT) and observation counts disagree (AO, RO) ([vcfremoveaberrantgenotypes](#vcfremoveaberrantgenotypes)).
-
-### interpretation and classification of variants
-
- * Obtain aggregate **statistics** about VCF files ([vcfstats](#vcfstats)).
- * Print the **receiver-operating characteristic (ROC)** of one VCF given a truth set ([vcfroc](#vcfroc)).
- * Annotate VCF records with the **Shannon entropy** of flanking sequence ([vcfentropy](#vcfentropy)).
- * Calculate the heterozygosity rate ([vcfhetcount](#vcfhetcount)).
- * Generate potential **primers** from VCF records ([vcfprimers](#vcfprimers)), to check for genome uniqueness.
- * Convert the numerical represenation of genotypes provided by the GT field to a **human-readable genotype format** ([vcfgenotypes](#vcfgenotypes)).
- * Observe how different alignment parameters, including context and entropy-dependent ones, influence **variant classification and interpretation** ([vcfremap](#vcfremap)).
- * **Classify variants** by annotations in the INFO field using a self-organizing map ([vcfsom](#vcfsom)); **re-estimate their quality** given known variants.
-
-
-A number of "helper" perl and python scripts (e.g. vcf2bed.py, vcfbiallelic) further extend functionality.
-
-In practice, users are encouraged to drive the utilities in the library in a streaming fashion, using pipes, to fully utilize resources on multi-core systems during interactive work.  Piping provides a convenient method to interface with other libraries (vcf-tools, BedTools, GATK, htslib, bcftools, freebayes) which interface via VCF files, allowing the composition of an immense variety of processing functions.
-
-## development
-
-See src/vcfecho.cpp for basic usage.  src/Variant.h and src/Variant.cpp describe methods available in the API.
-vcflib is incorporated into several projects, such as [freebayes](https://github.com/ekg/freebayes), which may provide a point of reference for prospective developers.
-Additionally, developers should be aware of that vcflib contains submodules (git repositories) comprising its dependencies (outside of lzib and a *nix environment).
-
-
-## installing
-
-vcflib includes submodules, so to obtain vcflib you have to use:
-
-    % git clone --recursive git://github.com/ekg/vcflib.git
-
-or
-
-    % git clone --recursive https://github.com/ekg/vcflib.git
-
-To build, use Make:
-
-    % cd vcflib
-    % make
-
-Executables are built into the ./bin directory in the repository.
-A number of shell, perl, python, and R scripts already reside there.
-This makes installation easy, as users can add vcflib/bin to their path, or copy the contained executables to a directory already in their path.
-
-
-## executables
-
-### vcf2tsv
-    
-    usage: vcf2tsv [-n null_string] [-g] [vcf file]
-Converts stdin or given VCF file to tab-delimited format, using null string to replace empty values in the table.
-Specifying -g will output one line per sample with genotype information.
-    
-### vcfaddinfo
-    
-    usage: vcfaddinfo <vcf file> <vcf file>
-Adds info fields from the second file which are not present in the first vcf file.
-    
-    
-### vcfafpath
-
-Uses allele frequencies in the AF info column to estimate phylogeny at multiallelic sites.
-
-
-### vcfallelicprimitives
-    
-    usage: vcfallelicprimitives [options] [file]
-    
-    options:
-        -m, --use-mnps          Retain MNPs as separate events (default: false)
-        -t, --tag-parsed FLAG   Tag records which are split apart of a complex allele
-                                with this flag
-    
-If multiple alleleic primitives (gaps or mismatches) are specified in a single VCF record, split the record into multiple lines, but drop all INFO fields.
-"Pure" MNPs are split into multiple SNPs unless the -m flag is provided.
-Genotypes are phased where complex alleles have been decomposed, provided genotypes in the input.
-
-    
-### vcfaltcount
-    
-Counts the number of alternate alleles in the record.
-    
-    
-### vcfannotate
-    
-    usage: vcfannotate [options] [<vcf file>]
-
-    options:
-        -b, --bed   use annotations provided by this BED file
-        -k, --key   use this INFO field key for the annotations
-        -d, --default  use this INFO field key for records without annotations
-
-Intersect the records in the VCF file with targets provided in a BED file.
-Intersections are done on the reference sequences in the VCF file.
-If no VCF filename is specified on the command line (last argument) the VCF read from stdin.
-
-    
-### vcfannotategenotypes
-    
-    usage: vcfannotategenotypes <annotation-tag> <vcf file> <vcf file>
-
-Annotates genotypes in the first file with genotypes in the second adding the genotype as another flag to each sample filed in the first file.
-Annotation-tag is the name of the sample flag which is added to store the annotation.
-Also adds a 'has\_variant' flag for sites where the second file has a variant.
-    
-    
-### vcfbreakmulti
-    
-    usage: vcfbreakmulti [options] [file]
-    
-If multiple alleles are specified in a single record, break the record into multiple lines, preserving allele-specific INFO fields.
-    
-    
-### vcfcheck
-    
-    usage: vcfcheck [options] <vcf file>
-    
-    options: -f, --fasta-reference  FASTA reference file to use to obtain
-                                    primer sequences
-    
-Verifies that the VCF REF field matches the reference as described.
-    
-    
-    
-### vcfcleancomplex
-    
-Removes reference-matching sequence from complex alleles and adjusts records to
-reflect positional change.
-    
-    
-### vcfcombine
-
-    usage: vcfcombine [vcf file] [vcf file] ...
-
-    options:
-        -h --help           This text.
-        -r --region REGION  A region specifier of the form chrN:x-y to bound the merge
-
-Combines VCF files positionally, combining samples when sites and alleles are identical.
-Any number of VCF files may be combined.
-The INFO field and other columns are taken from one of the files which are combined when records in multiple files match.
-Alleles must
-have identical ordering to be combined into one record.
-If they do not, multiple records will be emitted.
-
-
-### vcfcommonsamples
-    
-    usage: vcfcommonsamples <vcf file> <vcf file>
-    
-Outputs each record in the first file, removing samples not present in the second.
-    
-    
-### vcfcountalleles
-    
-Counts the total number of alleles in the input.
-
-
-### vcfcreatemulti
-
-If overlapping alleles are represented across multiple records, merge them into a single record.
-    
-### vcfdistance
-    
-Adds a value to each VCF record indicating the distance to the nearest variant
-in the file.
-    
-    
-### vcfentropy
-    
-    usage: vcfentropy [options] <vcf file>
-    
-    options:
-        -f, --fasta-reference  FASTA reference file to use to obtain primer sequences
-        -w, --window-size      Size of the window over which to calculate entropy
-    
-Anotates the output VCF file with, for each record, EntropyLeft,
-EntropyRight, EntropyCenter, which are the entropies of the sequence of the
-given window size to the left, right, and center  of the record.
-    
-    
-    
-### vcffilter
-    
-    usage: vcffilter [options] <vcf file>
-
-    options:
-        -f, --info-filter     specifies a filter to apply to the info fields of records,
-                              removes alleles which do not pass the filter
-        -g, --genotype-filter specifies a filter to apply to the genotype fields of records
-        -s, --filter-sites    filter entire records, not just alleles
-        -t, --tag-pass        tag vcf records as positively filtered with this tag, print all records
-        -F, --tag-fail        tag vcf records as negatively filtered with this tag, print all records
-        -A, --append-filter   append the existing filter tag, don't just replace it
-        -a, --allele-tag      apply -t on a per-allele basis.  adds or sets the corresponding INFO field tag
-        -v, --invert          inverts the filter, e.g. grep -v
-        -o, --or              use logical OR instead of AND to combine filters
-        -r, --region          specify a region on which to target the filtering, requires a BGZF
-                              compressed file which has been indexed with tabix.  any number of
-                              regions may be specified.
-
-Filter the specified vcf file using the set of filters.
-Filters are specified in the form "<ID> <operator> <value>:
-    -f "DP > 10"  # for info fields
-    -g "GT = 1|1" # for genotype fields
-    -f "CpG"  # for 'flag' fields
-
-Operators can be any of: =, !, <, >, |, &
-
-Any number of filters may be specified.  They are combined via logical AND unless --or is specified on the command line.
-Obtain logical negation through the use of parentheses, e.g. "! ( DP = 10 )"
-
-For convenience, you can specify "QUAL" to refer to the quality of the site, even though it does not appear in the INFO fields.
-
-    
-### vcffixup
-
-Count the allele frequencies across alleles present in each record in the VCF file. (Similar to vcftools --freq.)
-
-Uses genotypes from the VCF file to correct AC (alternate allele count), AF
-(alternate allele frequency), NS (number of called), in the VCF records.  For
-example:
-
-    % vcfkeepsamples file.vcf NA12878 | vcffixup - | vcffilter -f "AC > 0"
-
-Would downsample file.vcf to only NA12878, removing sites for which the sample
-was not called as polymorphic.
-    
-    
-### vcfflatten
-    
-    usage: vcfflatten [file]
-    
-Removes multi-allelic sites by picking the most common alternate.
-Requires allele frequency specification 'AF' and use of 'G' and 'A' to specify the fields which vary according to the Allele or Genotype.
-VCF file may be specified on the command line or piped as stdin.
-    
-    
-### vcfgeno2haplo
-    
-    usage: vcfgeno2haplo [options] [<vcf file>]
-    
-    options:
-        -w, --window-size N       compare records up to this many bp away (default 30)
-        -r, --reference FILE      FASTA reference file, required with -i and -u
-    
-Convert genotype-based phased alleles within --window-size into haplotype alleles.
-    
-    
-    
-### vcfgenotypecompare
-    
-    usage: vcfgenotypecompare <other-genotype-tag> <vcf file>
-    
-Adds statistics to the INFO field of the vcf file describing the amount of discrepancy between the genotypes (GT) in the vcf file and the genotypes reported in the <other-genotype-tag>.
-Use this after vcfannotategenotypes to get correspondence statistics for two vcfs.
-    
-    
-### vcfgenotypes
-    
-Converts numerical representation of genotypes (standard in GT field) to the
-alleles provided in the call's ALT/REF fields.
-    
-    
-### vcfglxgt
-    
-    usage: vcfglxgt [options] <vcf file>
-    
-    options:
-        -n, --fix-null-genotypes   only apply to null and partly-null genotypes
-
-Set genotypes using the maximum genotype likelihood for each sample.
-    
-    
-    
-### vcfhetcount
-    
-Count the number of heterozygotes in the input VCF.
-    
-    
-### vcfhethomratio
-    
-Provides the ratio between heterozygotes and homozygotes.
-
-### vcfindex
-
-Adds a field (id) which contains an allele-specific numerical index.
-    
-### vcfintersect
-    
-    usage: vcfintersect [options] [<vcf file>]
-    
-    options:
-        -b, --bed FILE            use intervals provided by this BED file
-        -v, --invert              invert the selection, printing only records which would
-                                    not have been printed out
-        -i, --intersect-vcf FILE  use this VCF for set intersection generation
-        -u, --union-vcf FILE      use this VCF for set union generation
-        -w, --window-size N       compare records up to this many bp away (default 30)
-        -r, --reference FILE      FASTA reference file, required with -i and -u
-        -l, --loci                output whole loci when one alternate allele matches
-        -m, --ref-match           intersect on the basis of record REF string
-        -t, --tag TAG             attach TAG to each record's info field if it would intersect
-        -V, --tag-value VAL       use this value to indicate that the allele is passing
-                                  '.' will be used otherwise.  default: 'PASS'
-        -M, --merge-from FROM-TAG
-        -T, --merge-to   TO-TAG   merge from FROM-TAG used in the -i file, setting TO-TAG
-                                  in the current file.
-
-For bed-vcf intersection, alleles which fall into the targets are retained.
-    
-For vcf-vcf intersection and union, unify on equivalent alleles within window-size bp as determined by haplotype comparison alleles.
-    
-    
-### vcfkeepgeno
-    
-    usage: vcfkeepgeno <vcf file> [FIELD1] [FIELD2] ...
-    
-Outputs each record in the vcf file, removing FORMAT fields not listed on the command line from sample specifications in the output.
-    
-    
-### vcfkeepinfo
-    
-    usage: vcfkeepinfo <vcf file> [FIELD1] [FIELD2] ...
-    
- Outputs each record in the vcf file, removing INFO fields not listed on the command line.
-    
-    
-### vcfkeepsamples
-    
-    usage: vcfkeepsamples <vcf file> [SAMPLE1] [SAMPLE2] ...
-
-Outputs each record in the vcf file, removing samples not listed on the command line.
-    
-    
-### vcfleftalign
-
-Left-align indels and complex variants in the input using a pairwise ref/alt
-alignment followed by a heuristic, iterative left realignment process that
-shifts indel representations to their absolute leftmost (5') extent.  This is
-the same procedure used in the internal left alignment in freebayes, and can be
-used when preparing VCF files for input to freebayes to decrease positional
-representation differences between the input alleles and left-realigned
-alignments.
-
-    usage: vcfleftalign [options] [file]
-
-    options:
-        -r, --reference FILE  Use this reference as a basis for realignment.
-        -w, --window N        Use a window of this many bp when left aligning (150).
-
-Left-aligns variants in the specified input file or stdin.
-Window size is determined dynamically according to the entropy of the regions flanking the indel.
-These must have entropy > 1 bit/bp, or be shorter than ~5kb.
-
-
-### vcflength
-    
-Adds the length of the variant record (in [-/+]) relative to the reference allele to each VCF record.
-    
-    
-### vcfnumalt
-    
-Annotates the VCF stream on stdin with the number of alternate alleles at the site.
-    
-    
-### vcfoverlay
-    
-    usage: vcfoverlay [options] [<vcf file> ...]
-    
-    options:
-        -h, --help       this dialog
-    
-    Overlays records in the input vcf files in the order in which they appear.
-    
-    
-### vcfparsealts
-    
-Demonstration of alternate allele parsing method.  This method uses pairwise
-alignment of REF and ALTs to determine component allelic primitives for each
-alternate allele.
-
-Use `vcfallelicprimitives` to decompose records while preserving format.
-    
-    
-### vcfprimers
-    
-    usage: vcfprimers [options] <vcf file>
-    
-    options:
-        -f, --fasta-reference  FASTA reference file to use to obtain primer sequences
-        -l, --primer-length    The length of the primer sequences on each side of the variant
-    
-For each VCF record, extract the flanking sequences, and write them to stdout as FASTA records suitable for alignment.
-This tool is intended for use in designing validation experiments.
-Primers extracted which would flank all of the alleles at multi-allelic sites.
-The name of the FASTA "reads" indicates the VCF record which they apply to.
-The form is >CHROM_POS_LEFT for the 3' primer and >CHROM_POS_RIGHT for the 5' primer, for example:
-    
-    >20_233255_LEFT
-    CCATTGTATATATAGACCATAATTTCTTTATCCAATCATCTGTTGATGGA
-    >20_233255_RIGHT
-    ACTCAGTTGATTCCATACCTTTGCCATCATGAATCATGTTGTAATAAACA
-    
-    
-    
-### vcfrandomsample
-    
-    usage: vcfrandomsample [options] [<vcf file>]
-    
-    options:
-        -r, --rate RATE      base sampling probability per locus
-        -s, --scale-by KEY   scale sampling likelihood by this Float info field
-        -p, --random-seed N  use this random seed
-    
-Randomly sample sites from an input VCF file, which may be provided as stdin.
-Scale the sampling probability by the field specified in KEY.
-This may be used to provide uniform sampling across allele frequencies, for instance.
-    
-    
-### vcfremap
-    
-    usage: vcfremap [options] [<vcf file>]
-    
-    options:
-        -w, --ref-window-size N      align using this many bases flanking each side of the reference allele
-        -s, --alt-window-size N      align using this many flanking bases from the reference around each alternate allele
-        -r, --reference FILE         FASTA reference file, required with -i and -u
-        -m, --match-score N          match score for SW algorithm
-        -x, --mismatch-score N       mismatch score for SW algorithm
-        -o, --gap-open-penalty N     gap open penalty for SW algorithm
-        -e, --gap-extend-penalty N   gap extension penalty for SW algorithm
-        -z, --entropy-gap-open       use entropy scaling for the gap open penalty
-        -R, --repeat-gap-extend N    penalize non-repeat-unit gaps in repeat sequence
-        -a, --adjust-vcf TAG         supply a new cigar as TAG in the output VCF
-    
-For each alternate allele, attempt to realign against the reference with lowered gap open penalty.
-If realignment is possible, adjust the cigar and reference/alternate alleles.
-    
-    
-### vcfremoveaberrantgenotypes
-    
-Strips genotypes which are homozygous but have observations implying
-heterozygosity.  Requires RA (reference allele observation) and AA (alternate
-allele observation) for each genotype.
-    
-    
-### vcfremovesamples
-    
-    usage: vcfremovesamples <vcf file> [SAMPLE1] [SAMPLE2] ...
-
-Outputs each record in the vcf file, removing samples listed on the command line.
-    
-    
-### vcfroc
-    
-    usage: vcfroc [options] [<vcf file>]
-    
-    options:
-        -t, --truth-vcf FILE      use this VCF as ground truth for ROC generation
-        -w, --window-size N       compare records up to this many bp away (default 30)
-        -r, --reference FILE      FASTA reference file
-    
-Generates a pseudo-ROC curve using sensitivity and specificity estimated against a putative truth set.
-Thresholding is provided by successive QUAL cutoffs.
-    
-    
-### vcfsamplediff
-    
-    usage: vcfsamplediff <tag> <sample> <sample> [ <sample> ... ] <vcf file>
-    
-Tags each record where the listed sample genotypes differ with <tag>
-The first sample is assumed to be germline, the second somatic.
-Each record is tagged with <tag>={germline,somatic,loh} to specify the type of variant given the genotype difference between the two samples.
-    
-    
-### vcfsamplenames
-    
-Prints the names of the samples in the VCF file.
-
-    
-### vcfsom
-    
-    usage: vcfsom [options] [vcf file]
-    
-    training: 
-        vcfsom -s output.som -f "AF DP ABP" training.vcf
-    
-    application: 
-        vcfsom -a output.som -f "AF DP ABP" test.vcf >results.vcf
-    
-vcfsom trains and/or applies a self-organizing map to the input VCF data on stdin, adding two columns for the x and y coordinates of the winning neuron in the network and an optional euclidean distance from a given node (--center).
-    
-If a map is provided via --apply,  map will be applied to input without training.
-Automated filtering to an estimated FP rate is 
-    
-    options:
-    
-        -h, --help             this dialog
-    
-    training:
-    
-        -f, --fields "FIELD ..."  INFO fields to provide to the SOM
-        -a, --apply FILE       apply the saved map to input data to FILE
-        -s, --save  FILE       train on input data and save the map to FILE
-        -t, --print-training-results
-                               print results of SOM on training input
-                               (you can also just use --apply on the same input)
-        -x, --width X          width in columns of the output array
-        -y, --height Y         height in columns of the output array
-        -i, --iterations N     number of training iterations or epochs
-        -d, --debug            print timing information
-    
-    recalibration:
-    
-        -c, --center X,Y       annotate with euclidean distance from center
-        -p, --paint-true VCF   use VCF file to annotate true variants (multiple)
-        -f, --paint-false VCF  use VCF file to annotate false variants (multiple)
-        -R, --paint-tag TAG    provide estimated FDR% in TAG in variant INFO
-        -N, --false-negative   replace FDR% (false detection) with FNR% (false negative)
-    
-    
-### vcfstats
-    
-    usage: vcfstats [options] <vcf file>
-    
-        -r, --region          specify a region on which to target the stats, requires a BGZF
-                              compressed file which has been indexed with tabix.  any number of
-                              regions may be specified.
-        -a, --add-info        add the statistics intermediate information to the VCF file,
-                              writing out VCF records instead of summary statistics
-        -l, --no-length-frequency    don't out the indel and mnp length-frequency spectra
-        -m, --match-score N          match score for SW algorithm
-        -x, --mismatch-score N       mismatch score for SW algorithm
-        -o, --gap-open-penalty N     gap open penalty for SW algorithm
-        -e, --gap-extend-penalty N   gap extension penalty for SW algorithm
-    
-Prints statistics about variants in the input VCF file.
-    
-    
-### vcfstreamsort
-    
-Reads VCF on stdin and guarantees that the positional order is correct provided out-of-order
-variants are no more than 100 positions in the VCF file apart.
-
-
-### vcfuniq
-
-Like GNU uniq, but for VCF records.  Remove records which have the same positon, ref, and alt
-as the previous record.
-
-
-### vcfuniqalleles
-
-For each record, remove any duplicate alternate alleles that may have resulted from merging
-separate VCF files.
-
-## GPAT++ 
-
-The application of population genomics to non-model organisms is greatly facilitated by the low cost of next generation sequencing (NGS). Barriers, however, exist for using NGS data for population level analyses. Traditional population genetic metrics, such as Fst, are not robust to the genotyping errors inherent in noisy NGS data. Additionally, many older software tools were never designed to handle the volume of data produced by NGS pipelines. To overcome these limitations we have developed a flexible software library designed specifically for large and noisy NGS datasets. The Genotype Phenotype Association Toolkit (GPAT++) implements both traditional and novel population genetic methods in a single user-friendly framework. GPAT consists of a suite of command-line tools and a Perl API that programmers can use to develop new applications. To date GPAT++ has been used successfully to identity genotype-phenotype associations in several real-world datasets including: domestic pigeons, Pox virus and pine rust fungus. GPAT++ is open source and freely available for academic use.
-
-### Functions
- - [X] Basic population stats (Af, Pi, eHH, oHet, genotypeCounts)
- - [X] Several flavors of Fst
- - [X] Linkage 
- - [X] Association testing (genotypic and pooled data)
- - [X] Haplotype methods (hapLrt)
- - [X] Smoothing 
- - [X] Permutation
- - [X] Plotting 
- 
-### Documentation , basic usage, FAQ
-
-
-1. Most GPAT++ tools write to both STDERR and STDOUT.
-2. All GPAT++ tools group individuals using a zero-based comma separated index (e.g. 0,1,2 ; first three individuals in VCF)
-3. Some GPAT++ tools (haplotype methods) require a region.
-4. What is the genotype likelihood format?  When in doubt use GT! Only a few GPAT++ tools make use of the genotype likelihoods.
- GT: The genotype is correct
- GL: Genotype likelihood (Freebayes)
- GP: Genotype probability (Beagle)
- PL: Scaled genotype likelihood (GATK)
-5. pFst is the only tool that will work on pooled data.
- 
-### wcFst
-
-Calculates Weir and Cockerham's Fst estimator bi-allelic genotype data (Weir and Cockerham 1984).  Sites with less than five genotypes in the target and background are skipped because they provide unreliable estimates of Fst.  Fix sites are also ignored.
-
-```
-INFO: help
-INFO: description:
-      wcFst is Weir & Cockerham's Fst for two populations.  Negative values are VALID,
-      they are sites which can be treated as zero Fst. For more information see Evolution, Vol. 38 N. 6 Nov 1984.
-      Specifically wcFst uses equations 1,2,3,4.
-
-Output : 3 columns :
-     1. seqid
-     2. position
-     3. target allele frequency
-     4. background allele frequency
-     5. wcFst
-
-INFO: usage:  wcFst --target 0,1,2,3,4,5,6,7 --background 11,12,13,16,17,19,22 --file my.vcf --deltaaf 0.1 --type PL
-
-INFO: required: t,target     -- argument: a zero based comma separated list of target individuals corrisponding to VCF columns
-INFO: required: b,background -- argument: a zero based comma separated list of background individuals corrisponding to VCF columns
-INFO: required: f,file       -- argument: proper formatted VCF
-INFO: required, y,type       -- argument: genotype likelihood format; genotype : GT,GL,PL,GP
-INFO: optional: r,region     -- argument: a tabix compliant genomic range: seqid or seqid:start-end
-INFO: optional: d,deltaaf    -- argument: skip sites where the difference in allele frequencies is less than deltaaf, default is zero
+The [Variant Call Format
+(VCF)](http://www.1000genomes.org/wiki/Analysis/Variant%20Call%20Format/vcf-variant-call-format-version-41)
+is a flat-file, tab-delimited textual format that
+describes reference-indexed variations between individuals.  VCF
+provides a common interchange format for the description of variation
+in individuals and populations of samples, and has become the
+*de facto* standard reporting format for a wide array of genomic
+variant detectors.
+
+vcflib provides methods to manipulate and interpret sequence variation
+described by VCF.  It is both:
+
+ * an API for parsing and operating on records of genomic variation as
+   it can be described by the VCF format
+ * a collection of command-line utilities for executing complex
+   manipulations on VCF files
+
+vclib is both a library (with an API) and a collection of useful
+tools. The API provides a quick and extremely permissive method to
+read and write VCF files.  Extensions and applications of the library
+provided in the included utilities (*.cpp) comprise the vast bulk of
+the library's utility.
+
+We have also added infrastructure to write Python bindings. See [below](#python).
+
+---
+
+Short index:
+
+- [Install](#INSTALL)
+- [Usage](#USAGE)
+- [TOOLS](#TOOLS)
+  * [Filter](#filter)
+  * [Metrics](#metrics)
+  * [Phenotype](#phenotype)
+  * [Genotype](#genotype)
+  * [Transformation](#transformation)
+  * [Statistics](#statistics)
+  * [Scripts](#scripts)
+  * [Python bindings](#python)
+- [Link library](#link-library)
+- [Build from source](#build-from-source)
+- [Development](#Development)
+- [LICENSE](#LICENSE)
+- [Credit work](#Credit)
+  * [Bibtex reference](#Bibtex-reference)
+
+---
+
+## INSTALL
+
+For latest updates see [RELEASE NOTES](./RELEASE_NOTES.md).
+
+### [Bioconda](https://bioconda.github.io/user/install.html)
+
+Conda installs in user land without root access
+
+```sh
+conda install -c bioconda vcflib
 ```
 
-### segmentFst
+### [Homebrew](https://brew.sh)
 
-This program provides a way to find continious regions with high Fst values.  It takes the output of wcFst and produces a BED file.  These high Fst region can be permutated with 'permuteGPATwindow'.
+Homebrew installs on Linux and Mac OSX
 
-```
-INFO: help
-INFO: description:
-      Creates genomic segments (bed file) for regions with high wcFst
-Output : 8 columns :
-     1. Seqid
-     2. Start (zero based)
-     3. End   (zero based)
-     4. Average Fst
-     5. Average high Fst (Fst > -s)
-     6. N Fst values in segment
-     7. N high fst values in segment
-     8. Segment length
-INFO: usage:  segmentFst -s 0.7 -f wcFst.output.txt
-
-INFO: required: -f            -- Output from wcFst
-INFO: optional: -s            -- High Fst cutoff [0.8] 
-
+```sh
+brew install brewsci/bio/vcflib
 ```
 
+### [Debian](https://debian.org/)
 
-### popStats
-Calculates basic population statistics at bi-allelic sites. The allele frequency is the number of non-reference alleles divided by the total number of alleles.  The expected hetrozygosity is 2*p*q, where p is the non-reference allele frequency and q is 1-p.  The observed heterozgosity is the fraction of 0/1 genotypes out of all genotypes.  The inbreeding coefficent, Fis, is the relative heterozygosity of each individual vs. compared to the target group. 
+For Debian and Ubuntu
 
-```
-INFO: help
-INFO: description:
-      General population genetic statistics for each SNP
-
-Output : 9 columns :
-     1. seqid
-     2. position
-     3. target allele frequency
-     4. expected heterozygosity
-     5. observed heterozygosity
-     6. number of hets
-     7. number of homozygous ref
-     8. number of homozygous alt
-     9. target Fis
-INFO: usage:  popStat --type PL --target 0,1,2,3,4,5,6,7 --file my.vcf
-
-INFO: required: t,target     -- a zero based comma separated list of target individuals corresponding to VCF columns
-INFO: required: f,file       -- proper formatted VCF
-INFO: required, y,type       -- genotype likelihood format; genotype : GL,PL,GP
-INFO: optional, r,region     -- a tabix compliant region : chr1:1-1000 or chr1
-```
-### genotypeSummary
-
-Generates a table of genotype counts.
-
-```
-INFO: help
-INFO: description:
-      Summarizes genotype counts for bi-allelic SNVs and indel
-
-INFO: usage:  genotypeSummmary --type PL --target 0,1,2,3,4,5,6,7 --file my.vcf --snp
-
-INFO: required: t,target     -- a zero based comma separated list of target individuals corresponding to VCF columns
-INFO: required: f,file       -- proper formatted VCF
-INFO: required, y,type       -- genotype likelihood format; genotype : GL,PL,GP
-INFO: optional, r,region     -- a tabix compliant region : chr1:1-1000 or chr1
-INFO: optional, s,snp        -- Only count SNPs 
-
+```sh
+apt-get install libvcflib-tools libvcflib-dev
 ```
 
-### pFst
+### [GNU Guix](https://guix.gnu.org/)
 
-pFst is a likelihood ratio test (LRT) quantifying allele frequency differences between populations.  The LRT by default uses the binomial distribution.  If Genotype likelihoods are provided it uses a modified binomial that weights each allele count by its certainty.  If type is set to 'PO' the LRT uses a beta distribution to fit the allele frequency spectrum of the target and background.  PO requires the AD and DP genotype fields and requires at least two pools for the target and background.  The p-value calculated in pFst is based on the chi-squared distribution with one degree of freedom. 
+We develop against guix and vcflib is packaged as
 
-```
-INFO: help
-INFO: description:
-      Summarizes genotype counts for bi-allelic SNVs and indel
-INFO: output: table of genotype counts for each individual.
-INFO: usage:  genotypeSummmary --type PL --target 0,1,2,3,4,5,6,7 --file my.vcf --snp
-
-INFO: required: t,target     -- a zero based comma separated list of target individuals corresponding to VCF columns
-INFO: required: f,file       -- proper formatted VCF
-INFO: required, y,type       -- genotype likelihood format; genotype : GL,PL,GP
-INFO: optional, r,region     -- a tabix compliant region : chr1:1-1000 or chr1
-INFO: optional, s,snp        -- Only count SNPs
-```
-### EHH and PI
-
-The 'sequenceDiversity' program calculates extended haplotype homozygosity and pi within a fixed-width sliding window.  This requires phased data.
-
-```
-INFO: help
-INFO: description:
-      The sequenceDiversity program calculates two popular metrics of  haplotype diversity: pi and
-      extended haplotype homozygoisty (eHH).  Pi is calculated using the Nei and Li 1979 formulation.
-      eHH a convenient way to think about haplotype diversity.  When eHH = 0 all haplotypes in the window
-      are unique and when eHH = 1 all haplotypes in the window are identical.
-
-Output : 5 columns:
-         1.  seqid
-         2.  start of window
-         3.  end of window
-         4.  pi
-         5.  eHH
-
-
-INFO: usage: sequenceDiversity --target 0,1,2,3,4,5,6,7 --file my.vcf
-
-INFO: required: t,target     -- argument: a zero base comma separated list of target individuals corresponding to VCF columns
-INFO: required: f,file       -- argument: a properly formatted phased VCF file
-INFO: required: y,type       -- argument: type of genotype likelihood: PL, GL or GP
-INFO: optional: a,af         -- sites less than af  are filtered out; default is 0
-INFO: optional: r,region     -- argument: a tabix compliant region : "seqid:0-100" or "seqid"
-INFO: optional: w,window     -- argument: the number of SNPs per window; default is 20
-
+```sh
+guix package -i vcflib
 ```
 
-###meltEHH
+See also the Guix shell below.
 
-The program 'meltEHH' produces the data to generate the following plot:
+## USAGE
 
-<img src="https://github.com/vcflib/vcflib/blob/master/examples/example-ehh.png?raw=true" alt="" width=400>
+Users are encouraged to drive the utilities in the library in a
+streaming fashion, using Unix pipes to fully utilize resources on
+multi-core systems.  Piping provides a convenient method to interface
+with other libraries (vcf-tools, BedTools, GATK, htslib,
+[bio-vcf](https://github.com/vcflib/bio-vcf), bcftools,
+[freebayes](https://github.com/freebayes)) which interface via VCF
+files, allowing the composition of an immense variety of processing
+functions. Examples can be found in the scripts,
+e.g. [./scripts](./scripts/).
+
+
+# TOOLS
+
+<!--
+
+    >>> from pytest.rtest import run_stdout, head, cat
+
+-->
+
+
+<!--
+  Created with ./scripts/bin2md.rb --index
+-->
+
+
+## filter
+
+| filter command | description |
+| :-------------- | :---------- |
+ | [vcfuniq](./doc/vcfuniq.md) | List unique genotypes. Similar to GNU uniq, but aimed at VCF records. **vcfuniq** removes records which have the same position, ref, and alt as the previous record on a sorted VCF file. Note that it does not adjust/combine genotypes in the output, but simply takes the first record. See also vcfcreatemulti for combining records. |
+ | [vcfuniqalleles](./doc/vcfuniqalleles.md) | List unique alleles For each record, remove any duplicate alternate alleles that may have resulted from merging separate VCF files. |
+ | [vcffilter](./doc/vcffilter.md) | VCF filter the specified vcf file using the set of filters |
+
+## metrics
+
+| metrics command | description |
+| :-------------- | :---------- |
+ | [vcfhethomratio](./doc/vcfhethomratio.md) | Generates the het/hom ratio for each individual in the file |
+ | [vcfhetcount](./doc/vcfhetcount.md) | Calculate the heterozygosity rate: count the number of alternate alleles in heterozygous genotypes in all records in the vcf file |
+ | [vcfdistance](./doc/vcfdistance.md) | Adds a tag to each variant record which indicates the distance to the nearest variant. (defaults to BasesToClosestVariant if no custom tag name is given. |
+ | [vcfentropy](./doc/vcfentropy.md) | Annotate VCF records with the Shannon entropy of flanking sequence. Anotates the output VCF file with, for each record, EntropyLeft, EntropyRight, EntropyCenter, which are the entropies of the sequence of the given window size to the left, right, and center of the record. Also adds EntropyRef and EntropyAlt for each alt. |
+ | [vcfcheck](./doc/vcfcheck.md) | Validate integrity and identity of the VCF by verifying that the VCF record's REF matches a given reference file. |
+
+## phenotype
+
+| phenotype command | description |
+| :-------------- | :---------- |
+ | [permuteGPAT++](./doc/permuteGPAT++.md) | **permuteGPAT++** is a method for adding empirical p-values to a GPAT++ score. |
+
+## genotype
+
+| genotype command | description |
+| :-------------- | :---------- |
+ | [hapLrt](./doc/hapLrt.md) | HapLRT is a likelihood ratio test for haplotype lengths. The lengths are modeled with an exponential distribution. The sign denotes if the target has longer haplotypes (1) or the background (-1). |
+ | [normalize-iHS](./doc/normalize-iHS.md) | normalizes iHS or XP-EHH scores. |
+ | [abba-baba](./doc/abba-baba.md) | **abba-baba** calculates the tree pattern for four indviduals. This tool assumes reference is ancestral and ignores non **abba-baba** sites. The output is a boolian value: 1 = true , 0 = false for abba and baba. the tree argument should be specified from the most basal taxa to the most derived. |
+
+## transformation
+
+| transformation command | description |
+| :-------------- | :---------- |
+ | [vcfintersect](./doc/vcfintersect.md) | VCF set analysis |
+ | [vcfleftalign](./doc/vcfleftalign.md) | Left-align indels and complex variants in the input using a pairwise ref/alt alignment followed by a heuristic, iterative left realignment process that shifts indel representations to their absolute leftmost (5') extent. |
+ | [vcfglxgt](./doc/vcfglxgt.md) | Set genotypes using the maximum genotype likelihood for each sample. |
+ | [vcfkeepsamples](./doc/vcfkeepsamples.md) | outputs each record in the vcf file, removing samples not listed on the command line |
+ | [vcfallelicprimitives](./doc/vcfallelicprimitives.md) | Note that this tool is considered legacy and will emit a warning! Use [vcfwave](./doc/vcfwave.md) instead. |
+ | [vcfcommonsamples](./doc/vcfcommonsamples.md) | Generates each record in the first file, removing samples not present in the second |
+ | [vcfcreatemulti](./doc/vcfcreatemulti.md) | Go through sorted VCF and if overlapping alleles are represented across multiple records, merge them into a single record. Currently only for indels. |
+ | [vcfld](./doc/vcfld.md) | Compute LD |
+ | [vcfsamplenames](./doc/vcfsamplenames.md) | List sample names |
+ | [vcfsample2info](./doc/vcfsample2info.md) | Take annotations given in the per-sample fields and add the mean, median, min, or max to the site-level INFO. |
+ | [vcflength](./doc/vcflength.md) | Add length info field |
+ | [vcfstreamsort](./doc/vcfstreamsort.md) | Sorts the input (either stdin or file) using a streaming sort algorithm. Guarantees that the positional order is correct provided out-of-order variants are no more than 100 positions in the VCF file apart. |
+ | [dumpContigsFromHeader](./doc/dumpContigsFromHeader.md) | Dump contigs from header |
+ | [vcfgeno2haplo](./doc/vcfgeno2haplo.md) | Convert genotype-based phased alleles within --window-size into haplotype alleles. Will break haplotype construction when encountering non-phased genotypes on input. |
+ | [vcfinfo2qual](./doc/vcfinfo2qual.md) | Sets QUAL from info field tag keyed by [key]. The VCF file may be omitted and read from stdin. The average of the field is used if it contains multiple values. |
+ | [vcfevenregions](./doc/vcfevenregions.md) | Generates a list of regions, e.g. chr20:10..30 using the variant density information provided in the VCF file to ensure that the regions have even numbers of variants. This can be use to reduce the variance in runtime when dividing variant detection or genotyping by genomic coordinates. |
+ | [vcfbreakmulti](./doc/vcfbreakmulti.md) | If multiple alleles are specified in a single record, break the record into multiple lines, preserving allele-specific INFO fields. |
+ | [vcfwave](./doc/vcfwave.md) | Realign reference and alternate alleles with WFA, parsing out the primitive alleles into multiple VCF records. New records have IDs that reference the source record ID. Genotypes are handled. Deletions generate haploid/missing genotypes at overlapping sites. |
+ | [vcfafpath](./doc/vcfafpath.md) | Display genotype paths |
+ | [vcfremoveaberrantgenotypes](./doc/vcfremoveaberrantgenotypes.md) | strips samples which are homozygous but have observations implying heterozygosity. Remove samples for which the reported genotype (GT) and observation counts disagree (AO, RO). |
+ | [vcf2tsv](./doc/vcf2tsv.md) | Converts VCF to per-allelle or per-genotype tab-delimited format, using null string to replace empty values in the table. Specifying -g will output one line per sample with genotype information. When there is more than one alt allele there will be multiple rows, one for each allele and, the info will match the 'A' index |
+ | [vcfqual2info](./doc/vcfqual2info.md) | Puts QUAL into an info field tag keyed by [key]. |
+ | [vcfnumalt](./doc/vcfnumalt.md) | outputs a VCF stream where NUMALT has been generated for each record using sample genotypes |
+ | [vcfprimers](./doc/vcfprimers.md) | For each VCF record, extract the flanking sequences, and write them to stdout as FASTA records suitable for alignment. |
+ | [vcf2fasta](./doc/vcf2fasta.md) | Generates sample_seq:N.fa for each sample, reference sequence, and chromosomal copy N in [0,1... ploidy]. Each sequence in the fasta file is named using the same pattern used for the file name, allowing them to be combined. |
+ | [vcffixup](./doc/vcffixup.md) | Generates a VCF stream where AC and NS have been generated for each record using sample genotypes |
+ | [vcfkeepinfo](./doc/vcfkeepinfo.md) | To decrease file size remove INFO fields not listed on the command line |
+ | [vcfsamplediff](./doc/vcfsamplediff.md) | Establish putative somatic variants using reported differences between germline and somatic samples. Tags each record where the listed sample genotypes differ with <tag>. The first sample is assumed to be germline, the second somatic. Each record is tagged with <tag>={germline,somatic,loh} to specify the type of variant given the genotype difference between the two samples. |
+ | [vcfflatten](./doc/vcfflatten.md) | Removes multi-allelic sites by picking the most common alternate. Requires allele frequency specification 'AF' and use of 'G' and 'A' to specify the fields which vary according to the Allele or Genotype. VCF file may be specified on the command line or piped as stdin. |
+ | [vcfglbound](./doc/vcfglbound.md) | Adjust GLs so that the maximum GL is 0 by dividing all GLs for each sample by the max. |
+ | [vcfecho](./doc/vcfecho.md) | Echo VCF to stdout (simple demo) |
+ | [vcfgeno2alleles](./doc/vcfgeno2alleles.md) | modifies the genotypes field to provide the literal alleles rather than indexes |
+ | [vcf2dag](./doc/vcf2dag.md) | Modify VCF to be able to build a directed acyclic graph (DAG) |
+ | [vcfannotategenotypes](./doc/vcfannotategenotypes.md) | Examine genotype correspondence. Annotate genotypes in the first file with genotypes in the second adding the genotype as another flag to each sample filed in the first file. annotation-tag is the name of the sample flag which is added to store the annotation. also adds a 'has_variant' flag for sites where the second file has a variant. |
+ | [vcfremap](./doc/vcfremap.md) | For each alternate allele, attempt to realign against the reference with lowered gap open penalty. If realignment is possible, adjust the cigar and reference/alternate alleles. Observe how different alignment parameters, including context and entropy-dependent ones, influence variant classification and interpretation. |
+ | [vcfremovesamples](./doc/vcfremovesamples.md) | outputs each record in the vcf file, removing samples listed on the command line |
+ | [vcfcleancomplex](./doc/vcfcleancomplex.md) | Removes reference-matching sequence from complex alleles and adjusts records to reflect positional change. |
+ | [vcfindex](./doc/vcfindex.md) | Adds an index number to the INFO field (id=position) |
+ | [vcfannotate](./doc/vcfannotate.md) | Intersect the records in the VCF file with targets provided in a BED file. Intersections are done on the reference sequences in the VCF file. If no VCF filename is specified on the command line (last argument) the VCF read from stdin. |
+ | [smoother](./doc/smoother.md) | smoothes is a method for window smoothing many of the GPAT++ formats. |
+ | [vcfkeepgeno](./doc/vcfkeepgeno.md) | Reduce file size by removing FORMAT fields not listed on the command line from sample specifications in the output |
+ | [vcfcombine](./doc/vcfcombine.md) | Combine VCF files positionally, combining samples when sites and alleles are identical. Any number of VCF files may be combined. The INFO field and other columns are taken from one of the files which are combined when records in multiple files match. Alleles must have identical ordering to be combined into one record. If they do not, multiple records will be emitted. |
+ | [vcfcat](./doc/vcfcat.md) | Concatenates VCF files |
+ | [vcfinfosummarize](./doc/vcfinfosummarize.md) | Take annotations given in the per-sample fields and add the mean, median, min, or max to the site-level INFO. |
+ | [vcfclassify](./doc/vcfclassify.md) | Creates a new VCF where each variant is tagged by allele class: snp, ts/tv, indel, mnp |
+ | [vcfoverlay](./doc/vcfoverlay.md) | Overlay records in the input vcf files with order as precedence. |
+ | [vcfaddinfo](./doc/vcfaddinfo.md) | Adds info fields from the second file which are not present in the first vcf file. |
+ | [vcfnullgenofields](./doc/vcfnullgenofields.md) | Makes the FORMAT for each variant line the same (uses all the FORMAT fields described in the header). Fills out per-sample fields to match FORMAT. Expands GT values of '.' with number of alleles based on ploidy (eg: './doc/.' for dipolid). |
+ | [vcfgenosamplenames](./doc/vcfgenosamplenames.md) | Get samplenames |
+
+## statistics
+
+| statistics command | description |
+| :-------------- | :---------- |
+ | [permuteSmooth](./doc/permuteSmooth.md) | **permuteSmooth** is a method for adding empirical p-values smoothed wcFst scores. |
+ | [plotHaps](./doc/plotHaps.md) | **plotHaps** provides the formatted output that can be used with 'bin/plotHaplotypes.R'. |
+ | [pVst](./doc/pVst.md) | **pVst** calculates vst, a measure of CNV stratification. |
+ | [wcFst](./doc/wcFst.md) | **wcFst** is Weir & Cockerham's Fst for two populations. Negative values are VALID, they are sites which can be treated as zero Fst. For more information see Evolution, Vol. 38 N. 6 Nov 1984. Specifically **wcFst** uses equations 1,2,3,4. |
+ | [popStats](./doc/popStats.md) | General population genetic statistics for each SNP |
+ | [vcfsitesummarize](./doc/vcfsitesummarize.md) | Summarize by site |
+ | [vcfrandomsample](./doc/vcfrandomsample.md) | Randomly sample sites from an input VCF file, which may be provided as stdin. Scale the sampling probability by the field specified in KEY. This may be used to provide uniform sampling across allele frequencies, for instance. |
+ | [vcfroc](./doc/vcfroc.md) | Generates a pseudo-ROC curve using sensitivity and specificity estimated against a putative truth set. Thresholding is provided by successive QUAL cutoffs. |
+ | [vcfstats](./doc/vcfstats.md) | Prints statistics about variants in the input VCF file. |
+ | [bFst](./doc/bFst.md) | **bFst** is a Bayesian approach to Fst. Importantly **bFst** accounts for genotype uncertainty in the model using genotype likelihoods. For a more detailed description see: `A Bayesian approach to inferring population structure from dominant markers' by Holsinger et al. Molecular Ecology Vol 11, issue 7 2002. The likelihood function has been modified to use genotype likelihoods provided by variant callers. There are five free parameters estimated in the model: each subpopulation's allele frequency and Fis (fixation index, within each subpopulation), a free parameter for the total population's allele frequency, and Fst. |
+ | [vcfcountalleles](./doc/vcfcountalleles.md) | Count alleles |
+ | [vcfparsealts](./doc/vcfparsealts.md) | Alternate allele parsing method. This method uses pairwise alignment of REF and ALTs to determine component allelic primitives for each alternate allele. |
+ | [genotypeSummary](./doc/genotypeSummary.md) | Generates a table of genotype counts. Summarizes genotype counts for bi-allelic SNVs and indel |
+ | [vcfgenosummarize](./doc/vcfgenosummarize.md) | Adds summary statistics to each record summarizing qualities reported in called genotypes. Uses: RO (reference observation count), QR (quality sum reference observations) AO (alternate observation count), QA (quality sum alternate observations) |
+ | [vcfaltcount](./doc/vcfaltcount.md) | count the number of alternate alleles in all records in the vcf file |
+ | [meltEHH](./doc/meltEHH.md) |  |
+ | [iHS](./doc/iHS.md) | **iHS** calculates the integrated haplotype score which measures the relative decay of extended haplotype homozygosity (EHH) for the reference and alternative alleles at a site (see: voight et al. 2006, Spiech & Hernandez 2014). |
+ | [segmentFst](./doc/segmentFst.md) | **segmentFst** creates genomic segments (bed file) for regions with high wcFst |
+ | [pFst](./doc/pFst.md) | **pFst** is a probabilistic approach for detecting differences in allele frequencies between two populations. |
+ | [sequenceDiversity](./doc/sequenceDiversity.md) | The **sequenceDiversity** program calculates two popular metrics of haplotype diversity: pi and extended haplotype homozygoisty (eHH). Pi is calculated using the Nei and Li 1979 formulation. eHH a convenient way to think about haplotype diversity. When eHH = 0 all haplotypes in the window are unique and when eHH = 1 all haplotypes in the window are identical. |
+ | [vcfgenotypecompare](./doc/vcfgenotypecompare.md) | adds statistics to the INFO field of the vcf file describing the amount of discrepancy between the genotypes (GT) in the vcf file and the genotypes reported in the <other-genotype-tag>. use this after vcfannotategenotypes to get correspondence statistics for two vcfs. |
+ | [vcfrandom](./doc/vcfrandom.md) | Generate a random VCF file |
+ | [segmentIhs](./doc/segmentIhs.md) | Creates genomic segments (bed file) for regions with high wcFst |
+ | [vcfgenotypes](./doc/vcfgenotypes.md) | Report the genotypes for each sample, for each variant in the VCF. Convert the numerical represenation of genotypes provided by the GT field to a human-readable genotype format. |
+
+See also [vcflib.md](./doc/vcflib.md).
+
+## scripts
+
+The vcflib source repository contains a number of additional scripts.
+Click on the link to see the source code.
+| script | description |
+| :-------------- | :---------- |
+| [vcfclearinfo](./scripts/vcfclearinfo) | clear INFO field |
+| [vcfqualfilter](./scripts/vcfqualfilter) | quality filter |
+| [vcfnulldotslashdot](./scripts/vcfnulldotslashdot) | rewrite null genotypes to ./. |
+| [vcfprintaltdiscrepancy.r](./scripts/vcfprintaltdiscrepancy.r) | show ALT discrepancies in a table |
+| [vcfremovenonATGC](./scripts/vcfremovenonATGC) | remove non-nucleotides in REF or ALT |
+| [plotSmoothed.R](./scripts/plotSmoothed.R) | smooth plot of wcFst, pFst or abba-baba |
+| [vcf_strip_extra_headers](./scripts/vcf_strip_extra_headers) | strip headers |
+| [plotHapLrt.R](./scripts/plotHapLrt.R) | plot results of pFst |
+| [vcfbiallelic](./scripts/vcfbiallelic) | remove anything that is not biallelic |
+| [vcfsort](./scripts/vcfsort) | sort VCF using shell script |
+| [vcfnosnps](./scripts/vcfnosnps) | remove SNPs |
+| [vcfmultiwayscripts](./scripts/vcfmultiwayscripts) | more multiway comparisons |
+| [vcfgtcompare.sh](./scripts/vcfgtcompare.sh) | annotates records in the first file with genotypes and sites from the second |
+| [plotPfst.R](./scripts/plotPfst.R) | plot pFst |
+| [vcfregionreduce_and_cut](./scripts/vcfregionreduce_and_cut) | reduce, gzip, and tabix |
+| [plotBfst.R](./scripts/plotBfst.R) | plot results of pFst |
+| [vcfnobiallelicsnps](./scripts/vcfnobiallelicsnps) | remove biallelic SNPs |
+| [vcfindels](./scripts/vcfindels) | show INDELS |
+| [vcfmultiway](./scripts/vcfmultiway) | multiway comparison |
+| [vcfregionreduce](./scripts/vcfregionreduce) | reduce VCFs using a BED File, gzip them up and create tabix index |
+| [vcfprintaltdiscrepancy.sh](./scripts/vcfprintaltdiscrepancy.sh) | runner |
+| [vcfclearid](./scripts/vcfclearid) | clear ID field |
+| [vcfcomplex](./scripts/vcfcomplex) | remove all SNPs but keep SVs |
+| [vcffirstheader](./scripts/vcffirstheader) | show first header |
+| [plotXPEHH.R](./scripts/plotXPEHH.R) | plot XPEHH |
+| [vcfregionreduce_pipe](./scripts/vcfregionreduce_pipe) | reduce, gzip and tabix in a pipe |
+| [vcfplotaltdiscrepancy.sh](./scripts/vcfplotaltdiscrepancy.sh) | plot ALT discrepancy runner |
+| [vcfplottstv.sh](./scripts/vcfplottstv.sh) | runner |
+| [vcfnoindels](./scripts/vcfnoindels) | remove INDELs |
+| [bgziptabix](./scripts/bgziptabix) | runs bgzip on the input and tabix indexes the result |
+| [plotHaplotypes.R](./scripts/plotHaplotypes.R) | plot results |
+| [vcfplotsitediscrepancy.r](./scripts/vcfplotsitediscrepancy.r) | plot site discrepancy |
+| [vcfindelproximity](./scripts/vcfindelproximity) | show SNPs around an INDEL |
+| [bed2region](./scripts/bed2region) | convert VCF CHROM column in VCF file to region |
+| [vcfplotaltdiscrepancy.r](./scripts/vcfplotaltdiscrepancy.r) | plot ALT discrepancies |
+| [plot_roc.r](./scripts/plot_roc.r) | plot ROC |
+| [vcfmultiallelic](./scripts/vcfmultiallelic) | remove anything that is not multiallelic |
+| [vcfsnps](./scripts/vcfsnps) | show SNPs |
+| [vcfvarstats](./scripts/vcfvarstats) | use fastahack to get stats |
+| [vcfregionreduce_uncompressed](./scripts/vcfregionreduce_uncompressed) | reduce, gzip and tabix |
+| [plotWCfst.R](./scripts/plotWCfst.R) | plot wcFst |
+| [vcf2bed.py](./scripts/vcf2bed.py) | transform VCF to BED file |
+| [vcfjoincalls](./scripts/vcfjoincalls) | overlay files using QUAL and GT from a second VCF |
+| [vcf2sqlite.py](./scripts/vcf2sqlite.py) | push VCF file into SQLite3 database using dbname |
+
+
+## python
+
+vcflib has rudimentary python bindings, but the are easy to build up on. See [pyvcflib](./test/pytest/pyvcflib.md).
+
+# Development
+
+## build from source
+
+VCFLIB uses the cmake build system, after a recursive checkout of the sources make the files in the 'build' directory with:
+
+```sh
+git clone --recursive https://github.com/vcflib/vcflib.git
+cd vcflib
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Debug -DZIG=OFF -DOPENMP=OFF ..
+cmake --build .
+cmake --install .
+```
+
+and to run the tests
+
+```sh
+ctest . --verbose
+```
+
+Executables are built into the `./build` directory in the repository.
+
+Note, if you have an existing repo update submodules with
+
+```sh
+git submodule update --init --recursive --progress
+cd build
+cmake --build . --target clean
+```
+
+Build dependencies can be viewed in the github-CI
+scripts (see badges above), as well as [guix.scm](./guix.scm) used by
+us to create the build environment (for instructions see the header of
+guix.scm). Essentially:
+
+- cmake
+- C++ compiler
+- htslib
+- tabixpp
+- WFA2
+- pybind11 (for testing)
+
+For include files add
+
+- libhts-dev
+- libtabixpp-dev
+- libtabixpp0
+
+And for some of the VCF executables
+
+- zig 0.9.1 (disable with cmake -DZIG=OFF)
+- python
+- perl
+
+Make sure the `zig` tool is in the `PATH`.
+The `zig` dependency is for the recently upgraded [vcfcreatemulti](./doc/vcfcreatemulti.md) that can be run after vcfwave to combine overlapping records.
+More on `zig` can be found in the souce code [README](./src/zig/README.md).
+
+### Using a different htslib
+
+Check out htslib in tabixpp (recursively) and
+
+    cmake -DHTSLIB_LOCAL:STRING=./htslib/ ..
+    cmake --build .
+
+## link library
+
+The standard build creates `build/vcflib.a`. Take a hint from the
+[cmake](./CMakeLists.txt) file that builds all the vcflib tools.
+
+## distro builds
+
+Distros, such as Debian, should build with something like
 
 ```
-INFO: help
-INFO: description:
-     meltEHH provides the data to plot EHH curves.
-Output : 4 columns :
-     1. seqid
-     2. position
-     3. EHH
-     4. ref or alt [0 == ref]
-Usage:
-      meltEHH --target 0,1,2,3,4,5,6,7 --pos 10 --file my.phased.vcf  \
-           --region chr1:1-1000 > STDOUT 2> STDERR
-
-Params:
-       required: t,target   <STRING>  A zero base comma separated list of target
-                                     individuals corresponding to VCF columns
-       required: r,region   <STRING>  A tabix compliant genomic range
-                                     format: "seqid:start-end" or "seqid"
-       required: f,file     <STRING>  Proper formatted and phased VCF.
-       required: y,type     <STRING>  Genotype likelihood format: GT,PL,GL,GP
-       required: p,position <INT>     Variant position to melt.
-       optional: a,af       <DOUBLE>  Alternative alleles with frequencies less
-                                     than [0.05] are skipped.
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF -DWFA_GITMODULE=OFF ..
 ```
-### iHS
 
-iHS calculates the integrated haplotype score which measures the relative decay of extended haplotype homozygosity (EHH) for the reference and alternative alleles at a site (see: voight et al. 2006, Spiech & Hernandez 2014).  Our code is highly concordant with both implementations mentioned. However, we do not set an upper limit to the allele frequency.  iHS can be run without a genetic map, in which case the change in EHH is integrated over a constant.  Human genetic maps for GRCh36 and GRCh37 (hg18 & hg19) can be found at: http://bochet.gcc.biostat.washington.edu/beagle/genetic_maps/ . iHS by default interpolates SNV positions to genetic position (you don't need a genetic position for every VCF entry in the map file).
+See the CMakeLists.txt header for more.
 
-iHS analyses requires normalization by allele frequency.  It is important that iHS is calculated over large regions so that the normalization does not down weight real signals.  For genome-wide runs it is recommended to run slightly overlapping windows and throwing out values that fail integration (columns 7 & 8 in the output) and then removing duplicates by using the 'sort' and 'uniq' linux commands.  Normalization of the output is as simple as running 'normalize-iHS'.
+## source code
 
+See [vcfecho.cpp](./src/vcfecho.cpp) for basic usage.
+[Variant.h](./src/Variant.h) and [Variant.cpp](./src/Variant.cpp)
+describe methods available in the API.  vcflib is incorporated into
+several projects, such as
+[freebayes](https://github.com/freebayes/freebayes), which may provide
+a point of reference for prospective developers.  Note vcflib contains
+submodules (git repositories) comprising some dependencies. A full
+Guix development environment we use is defined [here](./guix.scm).
+
+# adding tests
+
+vcflib uses different test systems. The most important one is the
+[doctest](https://docs.python.org/3/library/doctest.html) because it
+doubles as documentation. For an example see
+[vcf2tsv.md](./test/pytest/vcf2tsv.md) which can be run from the
+command line with
+
+```sh
+cd test
+python3 -m doctest -o NORMALIZE_WHITESPACE -o REPORT_UDIFF pytest/vcf2tsv.md
 ```
-INFO: help
-INFO: description:
-     iHS calculates the integrated ratio of haplotype decay between the reference and non-reference allele.
-Output : 4 columns :
-     1. seqid
-     2. position
-     3. target allele frequency
-     4. integrated EHH (alternative)
-     5. integrated EHH (reference)
-     6. iHS ln(iEHHalt/iEHHref)
-     7. != 0 integration failure
-     8. != 0 integration failure
 
-Usage:
-      iHS  --target 0,1,2,3,4,5,6,7 --file my.phased.vcf  \
-           --region chr1:1-1000 > STDOUT 2> STDERR
+We also added support for python bindings and unit tests. See [realign.py](./test/tests/realign.py) for an example.
 
-Params:
-       required: t,target  <STRING>  A zero base comma separated list of target
-                                     individuals corresponding to VCF columns
-       required: r,region  <STRING>  A tabix compliant genomic range
-                                     format: "seqid:start-end" or "seqid"
-       required: f,file    <STRING>  Proper formatted and phased VCF.
-       required: y,type    <STRING>  Genotype likelihood format: GT,PL,GL,GP
-       optional: a,af      <DOUBLE>  Alternative alleles with frquences less
-                                     than [0.05] are skipped.
-       optional: x,threads <INT>     Number of CPUS [1].
-       recommended: g,gen <STRING>   A PLINK formatted map file.
+# Support
 
+The developers are on the vcflib
+[matrix channel](https://matrix.to/#/#vcflib:matrix.org). Please do not use the github issue tracker for support issues!
+
+# Contributing
+
+To contribute code to vcflib send a github pull request. We may ask
+you to add a working test case as described in 'adding tests'.
+
+## LICENSE
+
+This software is distributed under the free software [MIT LICENSE](./LICENSE).
+
+## CREDIT
+
+Citations are the bread and butter of Science.  If you are using this
+software in your research and want to support our future work, please
+cite the following publication:
+
+Please cite:
+
+[A spectrum of free software tools for processing the VCF variant call format: vcflib, bio-vcf, cyvcf2, hts-nim and slivar](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009123).
+Garrison E, Kronenberg ZN, Dawson ET, Pedersen BS, Prins P (2022), PLoS Comput Biol 18(5): e1009123. https://doi.org/10.1371/journal.pcbi.1009123
+
+## Bibtex reference
+
+```bibtex
+@article{10.1371/journal.pcbi.1009123,
+    doi = {10.1371/journal.pcbi.1009123},
+    author = {Garrison, Erik AND Kronenberg, Zev N. AND Dawson, Eric T. AND Pedersen, Brent S. AND Prins, Pjotr},
+    journal = {PLOS Computational Biology},
+    publisher = {Public Library of Science},
+    title = {A spectrum of free software tools for processing the VCF variant call format: vcflib, bio-vcf, cyvcf2, hts-nim and slivar},
+    year = {2022},
+    month = {05},
+    volume = {18},
+    url = {https://doi.org/10.1371/journal.pcbi.1009123},
+    pages = {1-15}
+}
 ```
-### smoother
-```
-A method for window smoothing many of the GPAT++ formats.
 
-INFO: help
-INFO: description:
-      Smoother averages a set of scores over a sliding genomic window.
-      Smoother slides over genomic positions not the SNP indices. In other words
-      the number of scores within a window will not be constant. The last
-      window for each seqid can be smaller than the defined window size.
-      Smoother automatically analyses different seqids separately.
-Output : 4 columns :
-     1. seqid
-     2. window start
-     2. window end
-     3. averaged score
+Below the prepublished version of our paper
 
-INFO: usage: smoother --format pFst --file GPA.output.txt
-
-INFO: required: f,file     -- argument: a file created by GPAT++
-INFO: required: o,format   -- argument: format of input file, case sensitive
-                              available format options:
-                                wcFst, pFst, bFst, iHS, xpEHH, abba-baba
-INFO: optional: w,window   -- argument: size of genomic window in base pairs (default 5000)
-INFO: optional: s,step     -- argument: window step size in base pairs (default 1000)
-INFO: optional: t,truncate -- flag    : end last window at last position (zero based) last window at last position (zero based)
+```bibtex
+@article {Garrison2021.05.21.445151,
+	author = {Garrison, Erik and Kronenberg, Zev N. and Dawson, Eric T. and Pedersen, Brent S. and Prins, Pjotr},
+	title = {Vcflib and tools for processing the VCF variant call format},
+	elocation-id = {2021.05.21.445151},
+	year = {2021},
+	doi = {10.1101/2021.05.21.445151},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2021/05/23/2021.05.21.445151},
+	eprint = {https://www.biorxiv.org/content/early/2021/05/23/2021.05.21.445151.full.pdf},
+	journal = {bioRxiv}
+}
 ```

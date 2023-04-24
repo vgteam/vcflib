@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "BedReader.h"
 #include <getopt.h>
@@ -9,15 +18,15 @@ using namespace vcflib;
 void printSummary(char** argv) {
     cerr << "usage: " << argv[0] << " [options] [<vcf file>]" << endl
          << endl
-         << "options:" << endl 
-         << "    -b, --bed   use annotations provided by this BED file" << endl
-         << "    -k, --key   use this INFO field key for the annotations" << endl
-         << "    -d, --default  use this INFO field key for records without annotations" << endl
-         << endl
          << "Intersect the records in the VCF file with targets provided in a BED file." << endl
          << "Intersections are done on the reference sequences in the VCF file." << endl
          << "If no VCF filename is specified on the command line (last argument) the VCF" << endl
-         << "read from stdin." << endl;
+         << "read from stdin." << endl << endl
+         << "options:" << endl
+         << "    -b, --bed   use annotations provided by this BED file" << endl
+         << "    -k, --key   use this INFO field key for the annotations" << endl
+         << "    -d, --default  use this INFO field key for records without annotations" << endl;
+        cerr << endl << "Type: transformation" << endl << endl;
     exit(0);
 }
 

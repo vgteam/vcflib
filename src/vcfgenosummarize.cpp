@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <string>
@@ -11,14 +20,18 @@ using namespace vcflib;
 
 int main(int argc, char** argv) {
 
-    if (argc > 1 && (argv[1] == "-h" || argv[1] == "--help")) {
-        cerr << "usage: " << argv[0] << " <[input file] >[output vcf]" << endl
+  if (argc == 2) {
+    string h_flag = argv[1];
+    if (h_flag == "-h" || h_flag == "--help") {
+      cerr << "usage: " << argv[0] << " <[input file] >[output vcf]" << endl << endl
              << "Adds summary statistics to each record summarizing qualities reported in" << endl
              << "called genotypes.  Uses:" << endl
              << "RO (reference observation count), QR (quality sum reference observations)" << endl
              << "AO (alternate observation count), QA (quality sum alternate observations)" << endl;
+        cerr << endl << "Type: statistics" << endl << endl;
         return 1;
     }
+  }
 
     VariantCallFile variantFile;
     if (argc == 1) {
@@ -47,7 +60,7 @@ int main(int argc, char** argv) {
 
     // write the new header
     cout << variantFile.header << endl;
- 
+
     // print the records, filtering is done via the setting of varA's output sample names
     while (variantFile.getNextVariant(var)) {
         int refobs = 0;
@@ -94,7 +107,7 @@ int main(int argc, char** argv) {
             if (refobs == 0 || refqual == 0) {
                 var.info["RQA"].push_back(convert(1));
             } else {
-                var.info["RQA"].push_back(convert(((double)altqual[i]/(double)altobs[i]) / 
+                var.info["RQA"].push_back(convert(((double)altqual[i]/(double)altobs[i]) /
                                                   ((double)refqual/(double)refobs)));
             }
         }
@@ -104,4 +117,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

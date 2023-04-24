@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <getopt.h>
@@ -6,7 +15,8 @@ using namespace std;
 using namespace vcflib;
 
 void printSummary(char** argv) {
-    cerr << "usage: " << argv[0] << " [options] <vcf file>" << endl
+  cerr << "vcflib filter the specified vcf file using the set of filters" << endl << endl
+       << "usage: " << argv[0] << " [options] <vcf file>" << endl
          << endl
          << "options:" << endl
          << "    -f, --info-filter     specifies a filter to apply to the info fields of records," << endl
@@ -38,7 +48,7 @@ void printSummary(char** argv) {
          << endl
          << "For convenience, you can specify \"QUAL\" to refer to the quality of the site, even" << endl
          << "though it does not appear in the INFO fields." << endl
-         << endl;
+       << endl << "type: filter" << endl;
     exit(0);
 }
 
@@ -419,4 +429,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

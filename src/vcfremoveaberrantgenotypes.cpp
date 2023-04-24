@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <string>
@@ -33,12 +42,16 @@ void stripAberrant(Variant& var) {
 
 int main(int argc, char** argv) {
 
-    if (argc != 2) {
-        cerr << "usage: " << argv[0] << " <vcf file>" << endl
-             << "strips samples which are homozygous but have observations implying heterozygosity" << endl;
-        return 1;
+  if (argc == 2) {
+    string h_flag = argv[1];
+    if (h_flag == "-h" || h_flag == "--help") {
+      cerr << "usage: " << argv[0] << " <vcf file>" << endl << endl
+           << "strips samples which are homozygous but have observations implying heterozygosity." << endl
+           << "Remove samples for which the reported genotype (GT) and observation counts disagree (AO, RO)." << endl;
+      cerr << endl << "Type: transformation" << endl << endl;
+      return 1;
     }
-
+  }
     string filename = argv[1];
 
     VariantCallFile variantFile;
@@ -62,7 +75,7 @@ int main(int argc, char** argv) {
 
     // write the new header
     cout << variantFile.header << endl;
- 
+
     // print the records, filtering is done via the setting of varA's output sample names
     while (variantFile.getNextVariant(var)) {
         stripAberrant(var);
@@ -72,4 +85,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

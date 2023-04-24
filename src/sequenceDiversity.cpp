@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include "cdflib.hpp"
@@ -6,12 +15,13 @@
 
 #include <string>
 #include <iostream>
-#include <math.h>  
+#include <math.h>
 #include <cmath>
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
 #include <getopt.h>
+#include "makeUnique.h"
 #include "gpatInfo.hpp"
 
 using namespace std;
@@ -40,11 +50,12 @@ void printHelp(void){
   cerr << "INFO: required: t,target     -- argument: a zero base comma separated list of target individuals corresponding to VCF columns        " << endl;
   cerr << "INFO: required: f,file       -- argument: a properly formatted phased VCF file                                                       " << endl;
   cerr << "INFO: required: y,type       -- argument: type of genotype likelihood: PL, GL or GP                                                  " << endl;
-  cerr << "INFO: optional: a,af         -- sites less than af  are filtered out; default is 0                                          " << endl;      
-  cerr << "INFO: optional: r,region     -- argument: a tabix compliant region : \"seqid:0-100\" or \"seqid\"                                    " << endl; 
-  cerr << "INFO: optional: w,window     -- argument: the number of SNPs per window; default is 20                                               " << endl; 
+  cerr << "INFO: optional: a,af         -- sites less than af  are filtered out; default is 0                                          " << endl;
+  cerr << "INFO: optional: r,region     -- argument: a tabix compliant region : \"seqid:0-100\" or \"seqid\"                                    " << endl;
+  cerr << "INFO: optional: w,window     -- argument: the number of SNPs per window; default is 20                                               " << endl;
+  cerr << endl << "Type: statistics" << endl << endl;
   cerr << endl;
- 
+
   printVersion();
 
   exit(1);
@@ -58,10 +69,10 @@ void clearHaplotypes(string **haplotypes, int ntarget){
 }
 
 void loadIndices(map<int, int> & index, string set){
-  
+
   vector<string>  indviduals = split(set, ",");
   vector<string>::iterator it = indviduals.begin();
-  
+
   for(; it != indviduals.end(); it++){
     index[ atoi( (*it).c_str() ) ] = 1;
   }
@@ -71,18 +82,18 @@ void pi(map<string, int> & hapWin, int nHaps, double * pi, double * eHH, int wle
 
   double nchooseSum = 0;
   // summing over all possible haplotypes
-  for(std::map<string, int>::iterator it = hapWin.begin(); 
+  for(map<string, int>::iterator it = hapWin.begin();
       it != hapWin.end(); it++){
     nchooseSum += r8_choose(it->second, 2);
   }
 
   double piSum = 0;
-  // all unique pairwise 
-  for(std::map<string, int>::iterator it = hapWin.begin();
+  // all unique pairwise
+  for(map<string, int>::iterator it = hapWin.begin();
       it != hapWin.end(); it++){
-    
+
     // advancing it
-    std::map<string, int>::iterator iz = it;
+    map<string, int>::iterator iz = it;
     iz++;
     for(;iz != hapWin.end(); iz++){
       // different bases
@@ -95,14 +106,14 @@ void pi(map<string, int> & hapWin, int nHaps, double * pi, double * eHH, int wle
       double f1 = double(it->second)/double(nHaps);
       double f2 = double(iz->second)/double(nHaps);
       double perBaseDiff = double(ndiff)/double(wlen);
-      
+
       piSum += f1*f2*perBaseDiff;
     }
   }
-  
+
 
   *pi  = piSum;
-  *eHH = nchooseSum / r8_choose(nHaps, 2);  
+  *eHH = nchooseSum / r8_choose(nHaps, 2);
 }
 
 
@@ -112,25 +123,25 @@ void calc(string **haplotypes, int nhaps, vector<long int> pos, vector<double> t
   if(haplotypes[0][0].length() < (window-1) ){
     return;
   }
- 
+
   for(int snpA = 0; snpA < haplotypes[0][0].length() - window; snpA += 1){
-    
+
     map <string, int> targetHaplotypes;
-   
+
 
     for(int targetIndex = 0; targetIndex < target.size(); targetIndex++ ){
-      
+
       string haplotypeA;
       string haplotypeB;
-      
+
       haplotypeA += haplotypes[target[targetIndex]][0].substr(snpA, window) ;
       haplotypeB += haplotypes[target[targetIndex]][1].substr(snpA, window) ;
-      
+
       targetHaplotypes[haplotypeA]++;
       targetHaplotypes[haplotypeB]++;
-      
+
     }
-    
+
     double piEst;
     double eHH = 0;
 
@@ -138,16 +149,16 @@ void calc(string **haplotypes, int nhaps, vector<long int> pos, vector<double> t
 
     int wlen = pos[snpA + window] - pos[snpA];
 
-    pi(targetHaplotypes, target.size()*2, &piEst, &eHH, wlen); 
+    pi(targetHaplotypes, target.size()*2, &piEst, &eHH, wlen);
 
     cout << seqid << "\t" << pos[snpA] << "\t" << pos[snpA + window] << "\t" << piEst << "\t" << eHH << endl;
-   
+
   }
 
 }
 
 void loadPhased(string **haplotypes, genotype * pop, int ntarget){
-  
+
   int indIndex = 0;
 
   for(vector<string>::iterator ind = pop->gts.begin(); ind != pop->gts.end(); ind++){
@@ -171,27 +182,27 @@ int main(int argc, char** argv) {
 
   // set region to scaffold
 
-  string region = "NA"; 
+  string region = "NA";
 
-  // using vcflib; thanks to Erik Garrison 
+  // using vcflib; thanks to Erik Garrison
 
   VariantCallFile variantFile;
 
-  // zero based index for the target and background indivudals 
-  
+  // zero based index for the target and background indivudals
+
   map<int, int> targetIndex, backgroundIndex;
-  
-  // deltaaf is the difference of allele frequency we bother to look at 
+
+  // deltaaf is the difference of allele frequency we bother to look at
 
   // ancestral state is set to zero by default
 
 
   int counts = 0;
-  
-  // phased 
+
+  // phased
 
   int phased   = 0;
-  
+
   // use the background allele frequency
 
   int external = 0;
@@ -207,7 +218,7 @@ int main(int argc, char** argv) {
 
   string type = "NA";
 
-    const struct option longopts[] = 
+    const struct option longopts[] =
       {
 	{"version"     , 0, 0, 'v'},
 	{"help"        , 0, 0, 'h'},
@@ -228,7 +239,7 @@ int main(int argc, char** argv) {
     while(iarg != -1)
       {
 	iarg = getopt_long(argc, argv, "a:w:y:r:t:b:f:edhv", longopts, &findex);
-	
+
 	switch (iarg)
 	  {
 	  case 'h':
@@ -268,7 +279,7 @@ int main(int argc, char** argv) {
 	  case 'r':
 	    {
 	      cerr << "INFO: set seqid region to : " << optarg << endl;
-	      region = optarg; 
+	      region = optarg;
 	      break;
 	    }
 	  case 'e':
@@ -283,7 +294,7 @@ int main(int argc, char** argv) {
 	      cerr << "INFO: count haplotypes \"11\" rather than \"00\"" << endl;
 	      break;
 	    }
-	  case 'w':	    
+	  case 'w':
 	    {
 	      string win = optarg;
 	      windowSize = atof( win.c_str() );
@@ -327,15 +338,15 @@ int main(int argc, char** argv) {
     cerr << "INFO: window size: " << windowSize << endl;
 
     variantFile.open(filename);
-    
+
    if(region != "NA"){
-     variantFile.setRegion(region); 
+     variantFile.setRegion(region);
    }
-    
+
     if (!variantFile.is_open()) {
         return 1;
     }
-    
+
     Variant var(variantFile);
 
     vector<string> samples = variantFile.sampleNames;
@@ -343,8 +354,8 @@ int main(int argc, char** argv) {
 
     vector<int> target_h, background_h;
 
-    int index, indexi = 0;
-   
+    int index = 0, indexi = 0;
+
     for(vector<string>::iterator samp = samples.begin(); samp != samples.end(); samp++){
       string sampleName = (*samp);
       if(targetIndex.find(index) != targetIndex.end() ){
@@ -357,7 +368,7 @@ int main(int argc, char** argv) {
       }
       index++;
     }
-    
+
     vector<long int> positions;
     vector<double>   targetAFS;
     vector<double>   backgroundAFS;
@@ -366,9 +377,9 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < nsamples; i++) {
 	  haplotypes[i] = new string[2];
 	}
-    
+
     string currentSeqid = "NA";
-    
+
     while (variantFile.getNextVariant(var)) {
 
       if(!var.isPhased()){
@@ -390,73 +401,71 @@ int main(int argc, char** argv) {
 	backgroundAFS.clear();
       }
 
-      
+
       vector < map< string, vector<string> > > target, background, total;
-      
+
       int sindex = 0;
-      
+
       for(int nsamp = 0; nsamp < nsamples; nsamp++){
 
 	map<string, vector<string> > sample = var.samples[ samples[nsamp]];
 
 	if(targetIndex.find(sindex) != targetIndex.end() ){
 	  target.push_back(sample);
-	  total.push_back(sample);	  
+	  total.push_back(sample);
 	}
 	if(backgroundIndex.find(sindex) != backgroundIndex.end()){
 	  background.push_back(sample);
-	  total.push_back(sample);	  
-	}	
+	  total.push_back(sample);
+	}
 	sindex += 1;
       }
-      
-      genotype * populationTarget    ;
-      genotype * populationBackground;
-      genotype * populationTotal     ;
-      
+
+      unique_ptr<genotype> populationTarget    ;
+      unique_ptr<genotype> populationBackground;
+      unique_ptr<genotype> populationTotal     ;
+
+      using Detail::makeUnique;
+
       if(type == "PL"){
-	populationTarget     = new pl();
-	populationBackground = new pl();
-	populationTotal      = new pl();
+	populationTarget     = makeUnique<pl>();
+	populationBackground = makeUnique<pl>();
+	populationTotal      = makeUnique<pl>();
       }
       if(type == "GL"){
-	populationTarget     = new gl();
-	populationBackground = new gl();
-	populationTotal      = new gl();
+	populationTarget     = makeUnique<gl>();
+	populationBackground = makeUnique<gl>();
+	populationTotal      = makeUnique<gl>();
       }
       if(type == "GP"){
-	populationTarget     = new gp();
-	populationBackground = new gp();
-	populationTotal      = new gp();
+	populationTarget     = makeUnique<gp>();
+	populationBackground = makeUnique<gp>();
+	populationTotal      = makeUnique<gp>();
       }
       if(type == "GT"){
-        populationTarget     = new gt();
-        populationBackground = new gt();
-        populationTotal      = new gt();
+  populationTarget     = makeUnique<gt>();
+  populationBackground = makeUnique<gt>();
+  populationTotal      = makeUnique<gt>();
       }
-      
-      populationTarget->loadPop(target,         var.sequenceName, var.position);
-      
-      populationBackground->loadPop(background, var.sequenceName, var.position);
-	
-      populationTotal->loadPop(total,           var.sequenceName, var.position);
+
+      populationTarget->loadPop(target,         var.position);
+
+      populationBackground->loadPop(background, var.position);
+
+      populationTotal->loadPop(total,           var.position);
 
       if(populationTotal->af < af_filt){
-	
-	delete populationTarget;
-	delete populationBackground;
-	delete populationTotal;
 	continue;
       }
-      
+
       targetAFS.push_back(populationTarget->af);
       backgroundAFS.push_back(populationBackground->af);
       positions.push_back(var.position);
-      loadPhased(haplotypes, populationTotal, nsamples);
-      
+      loadPhased(haplotypes, populationTotal.get(), nsamples);
+
     }
 
     calc(haplotypes, nsamples, positions, targetAFS, backgroundAFS, external, derived, windowSize, target_h, background_h, currentSeqid);
-    
-    return 0;		    
+
+    return 0;
 }

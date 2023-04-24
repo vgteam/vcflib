@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "BedReader.h"
 #include "IntervalTree.h"
@@ -14,7 +23,7 @@ using namespace vcflib;
 void printSummary(char** argv) {
     cerr << "usage: " << argv[0] << " [options] [<vcf file>]" << endl
          << endl
-         << "options:" << endl 
+         << "options:" << endl
          << "    -w, --ref-window-size N      align using this many bases flanking each side of the reference allele" << endl
          << "    -s, --alt-window-size N      align using this many flanking bases from the reference around each alternate allele" << endl
          << "    -r, --reference FILE         FASTA reference file, required with -i and -u" << endl
@@ -27,7 +36,9 @@ void printSummary(char** argv) {
          << "    -a, --adjust-vcf TAG         supply a new cigar as TAG in the output VCF" << endl
          << endl
          << "For each alternate allele, attempt to realign against the reference with lowered gap open penalty." << endl
-         << "If realignment is possible, adjust the cigar and reference/alternate alleles." << endl;
+         << "If realignment is possible, adjust the cigar and reference/alternate alleles." << endl
+         << "Observe how different alignment parameters, including context and entropy-dependent ones, influence variant classification and interpretation." << endl;
+    cerr << endl << "Type: transformation" << endl << endl;
     exit(0);
 }
 
@@ -163,7 +174,7 @@ int main(int argc, char** argv) {
     } else {
         freference.open(fastaFileName);
     }
-    
+
     if (adjustVcf) {
         vector<string> commandline;
         for (int i = 0; i < argc; ++i)
@@ -189,7 +200,7 @@ int main(int argc, char** argv) {
             // try to remap locally
 
             string reference = freference.getSubSequence(var.sequenceName, var.position - 1 - windowsize, windowsize * 2 + var.ref.size());
-	    
+
             // passed to sw align
             unsigned int referencePos;
             string cigar;
@@ -202,7 +213,7 @@ int main(int argc, char** argv) {
 
             //cout << "REF:\t" << reference << endl;
             //cout << "ALT:\t" << string(windowsize - altwindowsize, ' ') << alternateQuery << endl;
-	    
+
             CSmithWatermanGotoh sw(matchScore, mismatchScore, gapOpenPenalty, gapExtendPenalty);
             if (useEntropy) sw.EnableEntropyGapPenalty(1);
             if (useRepeatGapExtendPenalty) sw.EnableRepeatGapExtensionPenalty(repeatGapExtendPenalty);
@@ -315,7 +326,7 @@ int main(int argc, char** argv) {
                     subend = c->back().first;
                 }
             }
-	    
+
             // adjust the cigars and get the new reference length
             int reflen = 0;
             for (vector<vector<pair<int, char> > >::iterator c = cigars.begin(); c != cigars.end(); ++c) {
@@ -347,4 +358,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

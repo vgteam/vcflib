@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "BedReader.h"
 #include "IntervalTree.h"
@@ -14,7 +23,7 @@ using namespace vcflib;
 void printSummary(char** argv) {
     cerr << "usage: " << argv[0] << " [options] [<vcf file>]" << endl
          << endl
-         << "options:" << endl 
+         << "options:" << endl
          << "    -t, --truth-vcf FILE      use this VCF as ground truth for ROC generation" << endl
          << "    -w, --window-size N       compare records up to this many bp away (default 30)" << endl
          << "    -c, --complex             directly compare complex alleles, don't parse into primitives" << endl
@@ -22,6 +31,7 @@ void printSummary(char** argv) {
          << endl
          << "Generates a pseudo-ROC curve using sensitivity and specificity estimated against" << endl
          << "a putative truth set.  Thresholding is provided by successive QUAL cutoffs." << endl;
+    cerr << endl << "Type: statistics" << endl << endl;
     exit(0);
 }
 
@@ -38,7 +48,7 @@ void buildVariantIntervalTree(VariantCallFile& variantFile,
         Variant* v = &variants.back();
         rawVariantIntervals[var.sequenceName].push_back(Interval<size_t, Variant*>(left, right, v));
     }
-	
+
     for (map<string, vector<Interval<size_t, Variant*> > >::iterator j = rawVariantIntervals.begin(); j != rawVariantIntervals.end(); ++j) {
         variantIntervals[j->first] = IntervalTree<size_t, Variant*>((vector<Interval<size_t, Variant*> >&&)j->second);
     }
@@ -257,7 +267,7 @@ int main(int argc, char** argv) {
         if (complex) {
             parsedAlleles[&*v] = variant.flatAlternates();
         } else {
-            parsedAlleles[&*v] = variant.parsedAlternates();
+            parsedAlleles[&*v] = variant.legacy_parsedAlternates();
         }
         // unique alleles are false negatives regardless of cutoff
         for (vector<string*>::iterator a = uniqueAlleles.begin(); a != uniqueAlleles.end(); ++a) {
@@ -283,7 +293,7 @@ int main(int argc, char** argv) {
             if (complex) {
                 parsedAlleles[*v] = variant.flatAlternates();
             } else {
-                parsedAlleles[*v] = variant.parsedAlternates();
+                parsedAlleles[*v] = variant.legacy_parsedAlternates();
             }
 
             map<string, vector<VariantAllele> >& parsedAlts = parsedAlleles[*v];
@@ -323,7 +333,7 @@ int main(int argc, char** argv) {
     int falseNegativeComplex = 0;
 
     // write header
-    
+
     cout << "threshold" << "\t"
          << "num_snps" << "\t"
          << "false_positive_snps" << "\t"
@@ -414,7 +424,7 @@ int main(int argc, char** argv) {
                 }
             } else {
                 --totalComplex;
-            }   
+            }
         }
         vector<VariantAllele*>& falseNegatives = falseNegativeAllelesAtCutoff[threshold];
         for (vector<VariantAllele*>::iterator va = falseNegatives.begin(); va != falseNegatives.end(); ++va) {
@@ -460,9 +470,8 @@ int main(int argc, char** argv) {
              << falseNegativeComplex << endl;
 
     }
-    
+
     exit(0);  // why?
     return 0;
 
 }
-

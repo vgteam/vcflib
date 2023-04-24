@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <string>
@@ -37,15 +46,17 @@ bool samplesDiffer(vector<string>& samples, Variant& var) {
 
 
 void printSummary(char** argv) {
-    cerr << "usage: " << argv[0] << " [options] <tag> <sample> <sample> [ <sample> ... ] <vcf file>" << endl
-         << "Tags each record where the listed sample genotypes differ with <tag>." << endl
-         << "The first sample is assumed to be germline, the second somatic." << endl
-         << "Each record is tagged with <tag>={germline,somatic,loh} to specify the type of" << endl
-         << "variant given the genotype difference between the two samples." << endl
-         << endl
-         << "options:" << endl
-         << "    -s --strict     Require that no observations in the germline support the somatic alternate." << endl
-         << endl;
+  cerr << "usage: " << argv[0] << " [options] <tag> <sample> <sample> [ <sample> ... ] <vcf file>" << endl << endl
+       << "Establish putative somatic variants using reported differences between germline and somatic samples." << endl
+       << "Tags each record where the listed sample genotypes differ with <tag>." << endl
+       << "The first sample is assumed to be germline, the second somatic." << endl
+       << "Each record is tagged with <tag>={germline,somatic,loh} to specify the type of" << endl
+       << "variant given the genotype difference between the two samples." << endl
+       << endl
+       << "options:" << endl
+       << "    -s --strict     Require that no observations in the germline support the somatic alternate." << endl
+       << endl;
+  cerr << endl << "Type: transformation" << endl << endl;
 }
 
 
@@ -73,7 +84,7 @@ int main(int argc, char** argv) {
         /* Detect the end of the options. */
         if (c == -1)
             break;
- 
+
         switch (c)
         {
         case 0:
@@ -89,7 +100,7 @@ int main(int argc, char** argv) {
         case 's':
             strict = true;
             break;
- 
+
         case 'h':
             printSummary(argv);
             exit(0);
@@ -100,7 +111,7 @@ int main(int argc, char** argv) {
             printSummary(argv);
             exit(1);
             break;
- 
+
         default:
             abort ();
         }
@@ -149,7 +160,7 @@ int main(int argc, char** argv) {
 
     // write the new header
     cout << variantFile.header << endl;
- 
+
     // print the records, filtering is done via the setting of varA's output sample names
     while (variantFile.getNextVariant(var)) {
         if (var.samples.find(samples.front()) != var.samples.end()
@@ -197,4 +208,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

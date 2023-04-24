@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include "Fasta.h"
@@ -10,19 +19,19 @@ using namespace vcflib;
 void printSummary(char** argv) {
     cerr << "usage: " << argv[0] << " [options] <vcf file>" << endl
          << endl
-         << "options:" << endl 
+         << "Generates a list of regions, e.g. chr20:10..30 using the variant" << endl
+         << "density information provided in the VCF file to ensure that the regions have" << endl
+         << "even numbers of variants.  This can be use to reduce the variance in runtime" << endl
+         << "when dividing variant detection or genotyping by genomic coordinates." << endl
+         << "options:" << endl
          << "    -f, --fasta-reference REF    FASTA reference file to use to obtain primer sequences." << endl
          << "    -n, --number-of-regions N    The number of desired regions." << endl
          << "    -p, --number-of-positions N  The number of positions per region." << endl
          << "    -o, --offset N               Add an offset to region positioning, to avoid boundary" << endl
          << "                                 related artifacts in downstream processing." << endl
          << "    -l, --overlap N              The number of sites to overlap between regions.  Default 0." << endl
-         << "    -s, --separator SEQ          Specify string to use to separate region output.  Default '-'" << endl
-         << endl
-         << "Generates a list of regions, e.g. chr20:10..30 using the variant" << endl
-         << "density information provided in the VCF file to ensure that the regions have" << endl
-         << "even numbers of variants.  This can be use to reduce the variance in runtime" << endl
-         << "when dividing variant detection or genotyping by genomic coordinates." << endl;
+         << "    -s, --separator SEQ          Specify string to use to separate region output.  Default '-'" << endl;
+    cerr << endl << "Type: transformation" << endl << endl;
     exit(0);
 }
 
@@ -76,7 +85,7 @@ int main(int argc, char** argv) {
         /* Detect the end of the options. */
         if (c == -1)
             break;
- 
+
         switch (c)
         {
         case 0:
@@ -112,7 +121,7 @@ int main(int argc, char** argv) {
         case 's':
             regionSplitSeq = optarg;
             break;
- 
+
         case 'h':
             printSummary(argv);
             exit(0);
@@ -123,7 +132,7 @@ int main(int argc, char** argv) {
             printSummary(argv);
             exit(1);
             break;
- 
+
         default:
             abort ();
         }
@@ -199,4 +208,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 
 /*
 
@@ -64,7 +73,8 @@ void printHelp(void){
   cerr << endl << endl;
   cerr << "INFO: help" << endl;
   cerr << "INFO: description:" << endl;
-  cerr << "      Creates genomic segments (bed file) for regions with high wcFst  " << endl;
+  cerr << "segmentFst creates genomic segments (bed file) for regions with high wcFst" << endl << endl ;
+  cerr << "segmentFst provides a way to find continious regions with high Fst values.  It takes the output of wcFst and produces a BED file.  These high Fst region can be permutated with 'permuteGPATwindow'" << endl ;
 
   cerr << "Output : 8 columns :                 "    << endl;
   cerr << "     1. Seqid                        "    << endl;
@@ -80,7 +90,7 @@ void printHelp(void){
   cerr << endl;
   cerr << "INFO: required: -f            -- Output from wcFst     "   << endl;
   cerr << "INFO: optional: -s            -- High Fst cutoff [0.8] "    << endl;
-
+  cerr << endl << "Type: statistics" << endl << endl;
   cerr << endl;
 
   printVersion();

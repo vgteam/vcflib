@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <string>
@@ -9,12 +18,17 @@ using namespace vcflib;
 
 int main(int argc, char** argv) {
 
-    if (argc == 2 && (argv[1] == "-h" || argv[1] == "--help")) {
-        cerr << "usage: " << argv[0] << " <vcf file>" << endl
-             << "count the number of alternate alleles in heterozygous genotypes in all records in the vcf file" << endl
-             << "outputs a count for each individual in the file" << endl;
+  if (argc == 2) {
+    string h_flag = argv[1];
+    if (h_flag == "-h" || h_flag == "--help") {
+      cerr << "usage: " << argv[0] << " <vcf file>" << endl << endl
+           << "Calculate the heterozygosity rate: " << endl
+           << "count the number of alternate alleles in heterozygous genotypes in all records in the vcf file" << endl
+           << "outputs a count for each individual in the file" << endl;
+      cerr << endl << "Type: metrics" << endl << endl;
         return 1;
     }
+  }
 
 
     string inputFilename;
@@ -69,4 +83,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

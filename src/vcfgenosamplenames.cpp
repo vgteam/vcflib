@@ -1,9 +1,43 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 
 using namespace std;
 using namespace vcflib;
 
 int main(int argc, char** argv) {
+  if (argc == 2) {
+    string h_flag = argv[1];
+    if (h_flag == "-h" || h_flag == "--help") {
+      cerr << R"(
+Get samplenames
+
+Usage: vcfgenosamplenames
+
+Example:
+
+vcfsamplenames samples/sample.vcf
+
+NA00001
+NA00002
+NA00003
+
+
+Type: transformation
+
+      )";
+      exit(1);
+    }
+  }
+
+
 
     VariantCallFile variantFile;
 
@@ -36,4 +70,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

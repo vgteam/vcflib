@@ -1,3 +1,12 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
 #include "Variant.h"
 #include "split.h"
 #include <string>
@@ -84,11 +93,21 @@ bool hasSNP(Variant& var) {
 
 int main(int argc, char** argv) {
 
-    if (argc != 2) {
-        cerr << "usage: " << argv[0] << " <vcf file>" << endl
-             << "outputs a VCF stream each variant is tagged by allele class: snp, ts/tv, indel, mnp" << endl;
-        return 1;
+  if (argc == 2) {
+    string h_flag = argv[1];
+    if (h_flag == "-h" || h_flag == "--help") {
+      cerr << R"(
+usage: vcfclassify <vcf file>
+
+Creates a new VCF where each variant is tagged by allele class: snp,
+ts/tv, indel, mnp
+
+Type: transformation
+
+      )";
+      exit(1);
     }
+  }
 
     string filename = argv[1];
 
@@ -125,7 +144,7 @@ int main(int argc, char** argv) {
 
     // write the new header
     cout << variantFile.header << endl;
- 
+
 
     while (variantFile.getNextVariant(var)) {
 
@@ -159,4 +178,3 @@ int main(int argc, char** argv) {
     return 0;
 
 }
-

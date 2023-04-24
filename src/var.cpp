@@ -1,3 +1,21 @@
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
+
+/*
+    vcflib C++ library for parsing and manipulating VCF files
+
+    Copyright © 2010-2020 Erik Garrison
+    Copyright © 2020      Pjotr Prins
+    Copyright © 2014      Zev N. Kronenberg
+
+    This software is published under the MIT License. See the LICENSE file.
+*/
 
 #include "var.hpp"
 
@@ -134,7 +152,7 @@ double pl::unphred(map< string, vector<string> > & geno, int index){
    return unphreded;
 }
 
-void pooled::loadPop(vector< map< string, vector<string> > > & group, string seqid, long int position){
+void pooled::loadPop(vector< map< string, vector<string> > > & group, long int position){
   vector< map< string, vector<string> > >::iterator targ_it = group.begin();
 
 
@@ -236,9 +254,7 @@ void pooled::estimatePosterior(void){
   }
 }
 
-void genotype::loadPop( vector< map< string, vector<string> > >& group, string seqid, long int position){
-
-  seqid = seqid;
+void genotype::loadPop( vector< map< string, vector<string> > >& group, long int position){
   pos   = position  ;
 
   vector< map< string, vector<string> > >::iterator targ_it = group.begin();
