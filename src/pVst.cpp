@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <algorithm>
+#include <random>
 #include <ctime>
 #include <cstdlib>
 #include "gpatInfo.hpp"
@@ -188,7 +189,10 @@ void calc(copyNcounts * d){
 
     trials += 1;
 
-    std::random_shuffle(d->total.begin(), d->total.end());
+
+    std::random_device seed_source;
+    std::mt19937 rng(seed_source());
+    std::shuffle(d->total.begin(), d->total.end(), rng);
 
     int tsize = d->target.size();
 
