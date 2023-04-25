@@ -49,8 +49,6 @@ set(EXTRA_FLAGS " ") # otherwise it injects OFF
 
 if(OPENMP)
   include(FindOpenMP)
-  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif(OPENMP)
 
 find_package(ZLIB)
@@ -427,6 +425,10 @@ endif()
 
 if (NOT tabixpp_LOCAL)
   target_link_libraries(vcflib PkgConfig::tabixpp)
+endif()
+
+if(OPENMP)
+  target_link_libraries(vcflib OpenMP::OpenMP_CXX)
 endif()
 
 # ---- Build all
