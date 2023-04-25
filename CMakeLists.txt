@@ -58,8 +58,8 @@ set_package_properties(ZLIB PROPERTIES TYPE REQUIRED)
 find_package(Threads)
 set_package_properties(Threads PROPERTIES TYPE REQUIRED)
 
-pkg_check_modules(HTSLIB htslib)   # Optionally builds from contrib/
-pkg_check_modules(TABIXPP tabixpp) # Optionally builds from contrib/
+pkg_check_modules(HTSLIB IMPORTED_TARGET GLOBAL htslib)   # Optionally builds from contrib/
+pkg_check_modules(TABIXPP IMPORTED_TARGET GLOBAL tabixpp) # Optionally builds from contrib/
 
 # ---- Build switches
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -116,23 +116,15 @@ include_directories(contrib/multichoose)
 include_directories(contrib/filevercmp)
 include_directories(contrib/c-progress-bar)
 
-if(HTSLIB_FOUND)
-  list(JOIN HTSLIB_CFLAGS " " HTSLIB_CFLAGS_STRING)
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${HTSLIB_CFLAGS_STRING}")
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${HTSLIB_CFLAGS_STRING}")
-else(HTSLIB_FOUND)
+if(NOT htslib_FOUND)
   message(STATUS "Using included htslib")
-  set(HTSLIB_LOCAL contrib/tabixpp/htslib)
-  set(TABIXPP_FOUND OFF) # also build tabixpp if htslib is missing
+  set(htslib_LOCAL contrib/tabixpp/htslib)
+  set(tabixpp_FOUND OFF) # also build tabixpp if htslib is missing
 endif()
 
-if(TABIXPP_FOUND)
-  list(JOIN TABIXPP_CFLAGS " " TABIXPP_CFLAGS_STRING)
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TABIXPP_CFLAGS_STRING}")
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TABIXPP_CFLAGS_STRING}")
-else(TABIXPP_FOUND)
+if(NOT tabixpp_FOUND)
   message(STATUS "Using included tabixpp")
-  set(TABIXPP_LOCAL contrib/tabixpp)
+  set(tabixpp_LOCAL contrib/tabixpp)
   include_directories(contrib/tabixpp)
   set(tabixpp_SOURCE
     contrib/tabixpp/tabix.cpp
@@ -179,8 +171,10 @@ set(vcflib_SOURCE
     contrib/c-progress-bar/progress.c
 )
 
-if (TABIXPP_LOCAL) # add the tabixpp source file
-    list(APPEND vcflib_SOURCE ${tabixpp_SOURCE})
+if (tabixpp_LOCAL) # add the tabixpp source file to provide tabixpp target
+    add_library(tabixpp OBJECT
+      ${tabixpp_SOURCE}
+    )
 endif()
 
 add_library(vcflib STATIC
@@ -326,13 +320,13 @@ add_definitions(-DVERSION="${BUILD_NUMBER}")
 # the older instructions which allow for a local build from
 # git submodules
 
-if (HTSLIB_LOCAL)
+if (htslib_LOCAL)
 
-  include_directories(${HTSLIB_LOCAL})
+  include_directories(${htslib_LOCAL})
 
   set(flags "-O2 -g -fPIC")
   ExternalProject_Add(htslib-EXT
-    SOURCE_DIR "${CMAKE_SOURCE_DIR}/${HTSLIB_LOCAL}"
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/${htslib_LOCAL}"
     UPDATE_COMMAND autoreconf -i
     CONFIGURE_COMMAND ./configure --disable-s3
     INSTALL_COMMAND ""
@@ -344,29 +338,22 @@ if (HTSLIB_LOCAL)
   set(htslib_INCLUDE "${SOURCE_DIR}")
   set(htslib_static "${SOURCE_DIR}/libhts.a")
   set(htslib_lib "${htslib_static}")
-  set(HTSLIB_LINK_LIBRARIES "${htslib_static}")
 
-  add_custom_target(htslib
-    DEPENDS htslib-EXT
-    VERBATIM)
-
-  # set_property(TARGET htslib PROPERTY IMPORTED_LOCATION ${hstlib_lib})
-  # add_dependencies(htslib htslib-EXT)
-
-  add_library(HTSLIB_LIBRARIES STATIC IMPORTED)
-  set_target_properties(HTSLIB_LIBRARIES PROPERTIES IMPORTED_LOCATION ${htslib_lib})
-  add_dependencies(HTSLIB_LIBRARIES htslib-EXT)
+  add_library(htslib STATIC IMPORTED)
+  set_target_properties(htslib PROPERTIES IMPORTED_LOCATION ${htslib_lib})
+  set_target_properties(htslib PROPERTIES INCLUDE_DIRECTORIES ${htslib_INCLUDE})
+  add_dependencies(htslib htslib-EXT)
 
 # If the user wants to configure our HTSlib to build with libddeflate, we need
 # to make sure to link against libdeflate as a transitive dependency. To do
-# that, pass -DHTSLIB_EXTRA_LIBS="-ldeflate" when configuring the project with
+# that, pass -Dhtslib_EXTRA_LIBS="-ldeflate" when configuring the project with
 # cmake.
 # TODO: Stop vendoring in htslib and just use find_package
 
-  # set(HTSLIB_EXTRA_LIBS "-lcurl" CACHE STRING "Library flags needed to link with htslib's dependencies, for chosen configuration")
-  # set_property(TARGET htslib PROPERTY INTERFACE_LINK_LIBRARIES ${HTSLIB_EXTRA_LIBS})
+  # set(htslib_EXTRA_LIBS "-lcurl" CACHE STRING "Library flags needed to link with htslib's dependencies, for chosen configuration")
+  # set_property(TARGET htslib PROPERTY INTERFACE_LINK_LIBRARIES ${htslib_EXTRA_LIBS})
 
-endif(HTSLIB_LOCAL)
+endif(htslib_LOCAL)
 
 if(WFA_GITMODULE)
   message(STATUS "Using included libwfa")
@@ -420,27 +407,20 @@ if (ZIG)
   list(APPEND vcflib_DEPS ZIG-EXT)
 endif ()
 
-if (HTSLIB_LOCAL)
-  list(APPEND vcflib_DEPS htslib)
-endif()
-
 set(vcflib_LIBS
-  ${HTSLIB_LIBRARIES}
   ${CURL_LIBRARIES}
   ${ZLIB_LIBRARIES}
   ${LIBLZMA_LIBRARIES}
   ${BZIP2_LIBRARIES}
-  ${TABIXPP_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}
   ${WFA_LINK_LIBRARIES}
-  ${HTSLIB_LINK_LIBRARIES}
 )
 
 if (ZIG)
   list(APPEND vcflib_LIBS ${ZIG_LINK_LIBRARIES})
 endif()
 
-add_dependencies(vcflib ${vcflib_DEPS})
+target_link_libraries(vcflib tabixpp htslib)
 
 # ---- Build all
 
