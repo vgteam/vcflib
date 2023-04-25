@@ -58,8 +58,8 @@ set_package_properties(ZLIB PROPERTIES TYPE REQUIRED)
 find_package(Threads)
 set_package_properties(Threads PROPERTIES TYPE REQUIRED)
 
-pkg_check_modules(HTSLIB IMPORTED_TARGET GLOBAL htslib)   # Optionally builds from contrib/
-pkg_check_modules(TABIXPP IMPORTED_TARGET GLOBAL tabixpp) # Optionally builds from contrib/
+pkg_check_modules(htslib IMPORTED_TARGET htslib)   # Optionally builds from contrib/
+pkg_check_modules(tabixpp IMPORTED_TARGET tabixpp) # Optionally builds from contrib/
 
 # ---- Build switches
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -171,10 +171,8 @@ set(vcflib_SOURCE
     contrib/c-progress-bar/progress.c
 )
 
-if (tabixpp_LOCAL) # add the tabixpp source file to provide tabixpp target
-    add_library(tabixpp OBJECT
-      ${tabixpp_SOURCE}
-    )
+if (tabixpp_LOCAL) # add the tabixpp source file and use a no-op target
+    list(APPEND vcflib_SOURCE ${tabixpp_SOURCE})
 endif()
 
 add_library(vcflib STATIC
@@ -420,7 +418,16 @@ if (ZIG)
   list(APPEND vcflib_LIBS ${ZIG_LINK_LIBRARIES})
 endif()
 
-target_link_libraries(vcflib tabixpp htslib)
+
+if (htslib_LOCAL)
+  target_link_libraries(vcflib htslib)
+else (htslib_LOCAL)
+  target_link_libraries(vcflib PkgConfig::htslib)
+endif()
+
+if (NOT tabixpp_LOCAL)
+  target_link_libraries(vcflib PkgConfig::tabixpp)
+endif()
 
 # ---- Build all
 
