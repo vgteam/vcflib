@@ -14,7 +14,9 @@
 #include <vector>
 
 #include <getopt.h>
+#if defined HAS_OPENMP
 #include <omp.h>
+#endif
 
 #include "Variant.h"
 #include "vcf-wfa.h"
@@ -181,7 +183,9 @@ int main(int argc, char** argv) {
         }
     }
 
+    #if defined HAS_OPENMP
     omp_set_num_threads(thread_count);
+    #endif
 
     off_t file_size = -1;
 
