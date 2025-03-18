@@ -2,7 +2,8 @@
 
 ### A C++ library for parsing and manipulating VCF files.
 
-[![Github-CI](https://github.com/vcflib/vcflib/workflows/CI/badge.svg)](https://github.com/vcflib/vcflib/actions?query=workflow%3ACI) [![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/version.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![GuixBadge](https://img.shields.io/badge/gnuguix-vcflib-brightgreen.svg)](https://www.gnu.org/software/guix/packages/V/) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
+[![Github-CI](https://github.com/vcflib/vcflib/actions/workflows/ci_test.yml/badge.svg?branch=master)](https://github.com/vcflib/vcflib/actions)
+[![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/version.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![GuixBadge](https://img.shields.io/badge/gnuguix-vcflib-brightgreen.svg)](https://packages.guix.gnu.org/packages/vcflib/) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
 
 Vcflib and related tools are the workhorses in bioinformatics for processing the VCF variant calling format. See
 
@@ -14,6 +15,8 @@ Garrison E, Kronenberg ZN, Dawson ET, Pedersen BS, Prins P (2022), PLoS Comput B
 ## news
 
 ![Humpty Logo - CC0 license](./logos/humpty-dumpty.jpg)
+
+**November 2024**: a fresh release with, mostly, pangenome related fixes.
 
 **January 2023**: this is vcflib's first *Humpty Dumpty* release: [vcfcreatemulti](./doc/vcfcreatemulti.md) is the natural companion to [vcfwave](./doc/vcfwave.md).
 Often variant callers are not perfect.
@@ -353,16 +356,22 @@ cd build
 cmake --build . --target clean
 ```
 
-Build dependencies can be viewed in the github-CI
-scripts (see badges above), as well as [guix.scm](./guix.scm) used by
-us to create the build environment (for instructions see the header of
-guix.scm). Essentially:
+The most interesting one, perhaps, is wfa2lib. Bundling is no longer the default, but it is a submodule that will install an optimized libwfa2.so. Set up compilation with
+
+```sh
+cmake -DCMAKE_BUILD_TYPE=Release -DWFA_GITMODULE=ON  ..
+cmake --build .
+ctest .
+cmake --install .
+```
+
+Build dependencies can be viewed in the github-CI scripts (see badges above), as well as [guix.scm](./guix.scm) used by us to create the build environment (for instructions see the header of guix.scm). Essentially:
 
 - cmake
 - C++ compiler
 - htslib
 - tabixpp
-- WFA2
+- WFA2 (wfa2lib)
 - pybind11 (for testing)
 
 For include files add
@@ -373,13 +382,28 @@ For include files add
 
 And for some of the VCF executables
 
-- zig 0.9.1 (disable with cmake -DZIG=OFF)
+- zig 0.13 (disable with cmake -DZIG=OFF)
 - python
 - perl
 
-Make sure the `zig` tool is in the `PATH`.
-The `zig` dependency is for the recently upgraded [vcfcreatemulti](./doc/vcfcreatemulti.md) that can be run after vcfwave to combine overlapping records.
+To use Zig compiled tools, such as vcfcreatemulti, make sure a recent `zig` compiler is in the `PATH`.
+The `zig` dependency is for the recently upgraded [vcfcreatemulti](./doc/vcfcreatemulti.md) that can be run after vcfwave to combine overlapping records. It is unfortunate that zig is not part of some large Linux distributions.
+
+Note you need to add the full path before running cmake and make. From the build dir this should work:
+
+```sh
+cd build
+export PATH=$(pwd)/../zig-linux-x86_64-0.13.0:$PATH
+zig version
+cmake  -DCMAKE_BUILD_TYPE=Debug -DWFA_GITMODULE=1 ..
+make VERBOSE=1
+```
+
 More on `zig` can be found in the souce code [README](./src/zig/README.md).
+
+### Using a recent C++ compiler
+
+You may encounter something like libstdc++.so.6: version `GLIBCXX_3.4.32' not found (required by ...vcflib/build/pyvcflib.cpython-310-x86_64-linux-gnu.so). This is caused by the python pyvcflib not running against a python interpreter compiled with the same libstdc++ dependency. That is a bit nasty to solve. For now make sure to match C++ compilers for the python module.
 
 ### Using a different htslib
 
@@ -398,7 +422,7 @@ The standard build creates `build/vcflib.a`. Take a hint from the
 Distros, such as Debian, should build with something like
 
 ```
-cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF -DWFA_GITMODULE=OFF ..
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF ..
 ```
 
 See the CMakeLists.txt header for more.

@@ -12,6 +12,55 @@ and
 - tabix -p vcf my_file.vcf.gz
 - pangenie, vg deconstruct, vcfbub
 
+## ChangeLog v1.0.13 (?)
+
+* Updated simde submodule
+* Fix CMakeLists.txt not to try to install wfa-lib when it is a package
+
+## ChangeLog v1.0.12 (20241122)
+
+* Improved parsing of INFO and FORMAT lines by @jeizenga in https://github.com/vcflib/vcflib/pull/374
+* Support external tabixpp by @adamnovak in https://github.com/vcflib/vcflib/pull/375
+* Fix vcfwave.cpp by @AndreaGuarracino in https://github.com/vcflib/vcflib/pull/407
+* Use regex to find the '..' between postions and replace it with '-' by @debbyku in https://github.com/vcflib/vcflib/pull/405
+* Fix tag-fail long option that was overriden by tag-pass in vcffilter.cpp by @Gullumluvl in https://github.com/vcflib/vcflib/pull/404
+* `vcfwave`: fix condition to avoid nullifying valid SNPs and MNPs by @AndreaGuarracino in https://github.com/vcflib/vcflib/pull/408
+* Upgraded Zig support to 0.13.0 by @pjotrp
+* Merged multichoose code into vcflib since no one else uses it
+* Added sources for canonicalize too
+* Moved Fasta.h (fastahack) dependencies from Variant.h into sources
+* Updated multichoose and simde modules
+* Improved vcfwave support
+
+### New Contributors
+* @jeizenga made their first contribution in https://github.com/vcflib/vcflib/pull/374
+* @debbyku made their first contribution in https://github.com/vcflib/vcflib/pull/405
+* @Gullumluvl made their first contribution in https://github.com/vcflib/vcflib/pull/404
+
+## ChangeLog v1.0.11-pre ()
+
++ Stopped vendoring wfa2lib by default - so now the Debian build command is
+  `cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF ..`
+
+
+## ChangeLog v1.0.10 (20240420)
+
+Vcflib maintenance release
+
++ Fixed vcfwave bugs - thanks Andrea Guarracino!
++ Fixed c++17 compatability - thanks Alex Petty!
++ Fixed tabixpp script - thanks Blaise Li!
++ Improved for vcfwave the wfa2lib build, fixed running tests with upstream build update
++ Removed deprecated binary_function
++ Removed unused files from repo
++ Updated README
+
+## ChangeLog v1.0.9 (20230211)
+
+Vcflib maintenance release - mostly for including in Debian
+
++ Another fix so downstream packages, such as freebayes, no longer need WFAlib.
+
 ## ChangeLog v1.0.8 (20230210)
 
 Vcflib maintenance release - mostly for including in Debian

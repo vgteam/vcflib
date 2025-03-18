@@ -1,8 +1,9 @@
 /*
     vcflib C++ library for parsing and manipulating VCF files
 
-    Copyright © 2010-2023 Erik Garrison
-    Copyright © 2020-2023 Pjotr Prins
+    Copyright © 2010-2024 Erik Garrison
+    Copyright © 2020-2024 Pjotr Prins
+    Copyright © 2024 Andrea Guarracino
 
     This software is published under the MIT License. See the LICENSE file.
 */
@@ -14,7 +15,7 @@
 #include <vector>
 
 #include <getopt.h>
-#if defined HAS_OPENMP
+#ifdef WFA_PARALLEL
 #include <omp.h>
 #endif
 
@@ -183,7 +184,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    #if defined HAS_OPENMP
+    #ifdef WFA_PARALLEL
     omp_set_num_threads(thread_count);
     #endif
 
@@ -302,7 +303,7 @@ int main(int argc, char** argv) {
                     string AT;
                     double AF = -1;
                     string wftag = alt0+":"+to_string(wfpos)+":"+ref+"/"+aligned;
-                    if (var.ref != aligned) {
+                    if (ref != aligned) {
                         auto index = [&](vector<string> v, string allele) {
                             //auto check = (is_inv ? reverse_complement(allele) : allele); DISABLED
                             auto check = allele;
@@ -448,7 +449,7 @@ int main(int argc, char** argv) {
                             auto overlap = [] (unsigned int pos,tuple<unsigned int, unsigned int> range) {
                                 auto start = get<0>(range);
                                 auto end = get<1>(range);
-                                return (pos >= start || pos <= end);
+                                return (pos >= start && pos <= end);
                             };
                             if (overlap(pos1,check_range) || overlap(pos2,check_range)) {
                                 int i = 0;
@@ -507,7 +508,6 @@ int main(int argc, char** argv) {
                     vector<string> ORIGIN{ v.origin };
                     newvar.info[parseFlag] = ORIGIN;
                 }
-                
                 newvar.info["TYPE"] = TYPE;
                 newvar.info["LEN"] = vector<string>{to_string(v.size)};
 
@@ -543,7 +543,7 @@ int main(int argc, char** argv) {
             }
         }
         else {
-            var.legacy_reduceAlleles(
+            var.reduceAlleles(
                 varAlleles,
                 variantFile,
                 var,

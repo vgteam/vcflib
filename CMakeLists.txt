@@ -1,10 +1,10 @@
 # For Debian currently with
 #
 #   cd build
-#   cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF -DWFA_GITMODULE=OFF ..
-#   make
-#   make test
-#   make install
+#   cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF ..
+#   cmake --build .
+#   ctest .
+#   cmake --install .
 #
 cmake_minimum_required(VERSION 3.16)
 project(vcflib)
@@ -38,8 +38,7 @@ option(PROFILING "Enable profiling" OFF)
 option(GPROF "Enable gprof profiling" OFF)
 option(ASAN "Use address sanitiser" OFF)
 option(ZIG "Set to OFF to disable the zig code" ON)
-option(WFA_GITMODULE "Force local git submodule for WFA2LIB" ON) # disable in distros, you may need to add path to WFA_INCLUDE_DIRS
-
+option(WFA_GITMODULE "Force local git submodule for WFA2LIB" OFF) # disabled by default now
 include(CheckIPOSupported) # adds lto
 check_ipo_supported(RESULT ipo_supported OUTPUT output)
 
@@ -81,7 +80,7 @@ endif ()
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_FLAGS}")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${EXTRA_FLAGS}")
-  add_definitions(-Wfatal-errors)
+  add_definitions(-Wfatal-errors) # stop after first error
 endif ()
 
 if (ASAN)
@@ -110,7 +109,7 @@ include_directories(include)
 include_directories(contrib/fastahack)
 include_directories(contrib/intervaltree)
 include_directories(contrib/smithwaterman)
-include_directories(contrib/multichoose)
+# include_directories(contrib/multichoose) merged with vcflib
 include_directories(contrib/filevercmp)
 include_directories(contrib/c-progress-bar)
 
@@ -135,24 +134,28 @@ endif()
 
 file(GLOB INCLUDES
   src/*.h*
-  contrib/multichoose/*.h*
+  # contrib/multichoose/*.h*
   contrib/intervaltree/*.h*
   contrib/smithwaterman/*.h*
   contrib/fastahack/*.h*
   contrib/filevercmp/*.h*
   )
 
-set(vcflib_SOURCE
-    src/vcf-c-api.cpp
-    src/legacy.cpp
+set(vcfwfa_SOURCE
+    src/legacy.cpp # introduces a WFA dependency
     src/vcf-wfa.cpp
+)
+
+set(vcflib_SOURCE
+    ${vcfwfa_SOURCE}
+    src/vcf-c-api.cpp
     src/Variant.cpp
+    src/canonicalize.cpp
     src/rnglib.cpp
     src/var.cpp
     src/pdflib.cpp
     src/cdflib.cpp
     src/split.cpp
-    src/legacy.cpp
     src/rkmh.cpp
     src/murmur3.cpp
     src/LeftAlign.cpp
@@ -217,16 +220,11 @@ set(BINS
     vcfsamplediff
     vcfremoveaberrantgenotypes
     vcfrandom
-    vcfparsealts
-    vcfstats
     vcfflatten
     vcfprimers
     vcfnumalt
-    vcfcleancomplex
     vcfintersect
     vcfannotate
-    vcfallelicprimitives
-    vcfwave
     vcfoverlay
     vcfaddinfo
     vcfkeepinfo
@@ -238,7 +236,6 @@ set(BINS
     vcfrandomsample
     vcfentropy
     vcfglxgt
-    vcfroc
     vcfcheck
     vcfstreamsort
     vcfuniq
@@ -264,6 +261,16 @@ set(BINS
     vcfinfosummarize
     vcfcreatemulti
 )
+
+
+set(WFBINS # Introduce wavefront dependency
+    vcfallelicprimitives
+    vcfcleancomplex
+    vcfparsealts
+    vcfroc
+    vcfstats
+    vcfwave
+  )
 
 set(SCRIPTS
     bed2region
@@ -354,15 +361,17 @@ endif(htslib_LOCAL)
 if(WFA_GITMODULE)
   message(STATUS "Using included libwfa")
   set(WFA_INCLUDE_DIRS ${WFA_LOCAL})
-  add_subdirectory(${WFA_LOCAL} EXCLUDE_FROM_ALL)
+  add_subdirectory(${WFA_LOCAL})
   set(WFALIB wfa2) # pick up the wfa2 lib target from the included CMakeLists.txt
 else(WFA_GITMODULE)
+  include_directories($ENV{CMAKE_PREFIX_PATH}/include/wfa2lib)
   set(WFA_INCLUDE_DIRS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/wfa2lib)
-  find_library(WFALIB wfa2 wfa) # distro search for shared lib
-  if(NOT WFALIB)
-    message(STATUS "ERROR: Can not find libfwa! Make sure it is installed or use the git submodule instead")
-  endif()
+  find_library(WFALIB wfa2 wfa REQUIRED) # distro search for shared lib
 endif(WFA_GITMODULE)
+
+# if(NOT WFALIB)
+#   message(STATUS "ERROR: Can not find wfa2lib! Make sure it is installed or use the git submodule instead")
+# endif()
 
 include_directories(${WFA_INCLUDE_DIRS})
 MESSAGE(STATUS "WFA using include ${WFA_INCLUDE_DIRS}")
@@ -439,13 +448,12 @@ if (NOT BUILD_ONLY_LIB)
     add_dependencies(${BIN} vcflib)
     target_link_libraries(${BIN} PUBLIC ${vcflib_LIBS} vcflib)
   endforeach(BIN ${BINS})
-  # These binaries include WFALIB
-  target_link_libraries(vcfallelicprimitives PUBLIC ${WFALIB})
-  target_link_libraries(vcfcleancomplex PUBLIC ${WFALIB})
-  target_link_libraries(vcfparsealts PUBLIC ${WFALIB})
-  target_link_libraries(vcfroc PUBLIC ${WFALIB})
-  target_link_libraries(vcfstats PUBLIC ${WFALIB})
-  target_link_libraries(vcfwave PUBLIC ${WFALIB})
+  foreach(WFBIN ${WFBINS})
+    add_executable(${WFBIN} src/${WFBIN}.cpp ${vcfwfa_SOURCE})
+    add_dependencies(${WFBIN} vcflib)
+    target_link_libraries(${WFBIN} PUBLIC ${vcflib_LIBS} vcflib)
+    target_link_libraries(${WFBIN} PUBLIC ${vcflib_LIBS} ${WFALIB})
+  endforeach(WFBIN ${BINS})
   install(TARGETS ${BINS} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   # ---- Copy scripts
@@ -465,7 +473,6 @@ install(TARGETS pyvcflib LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 enable_testing()
 
-
 function(add_pytest TEST_FILE)
   add_test(
       NAME ${TEST_FILE}
@@ -473,7 +480,7 @@ function(add_pytest TEST_FILE)
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
   )
   SET_TESTS_PROPERTIES(${TEST_FILE}
-      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}")
+      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build;;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}")
 endfunction()
 
 function(add_pydoctest TEST_FILE)
@@ -484,7 +491,7 @@ function(add_pydoctest TEST_FILE)
   )
   SET_TESTS_PROPERTIES(${TEST_FILE}
       # PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:symbolize=1;LSAN_OPTIONS=verbosity=2:log_threads=1:suppressions=../test/libasan-suppress.txt")
-      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build:${PROJECT_SOURCE_DIR}/test/pytest;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}")
+      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build:${PROJECT_SOURCE_DIR}/test/pytest")
 endfunction()
 
 
@@ -577,7 +584,10 @@ endif (PANDOC)
 # ---- Install
 
 install(TARGETS vcflib ARCHIVE DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(WFA_GITMODULE)
+  install(TARGETS ${WFALIB} ARCHIVE DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif(WFA_GITMODULE)
 
-install(FILES ${INCLUDES} DESTINATION include)
+install(FILES ${INCLUDES} DESTINATION include/vcflib)
 
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/man/ DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)

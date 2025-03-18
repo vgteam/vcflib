@@ -25,6 +25,7 @@
 #include <random>
 #include <ctime>
 #include <cstdlib>
+#include <random>
 #include "gpatInfo.hpp"
 
 #if defined HAS_OPENMP
@@ -189,10 +190,9 @@ void calc(copyNcounts * d){
 
     trials += 1;
 
+    static std::mt19937 g{std::random_device{}()};
 
-    std::random_device seed_source;
-    std::mt19937 rng(seed_source());
-    std::shuffle(d->total.begin(), d->total.end(), rng);
+    std::shuffle(d->total.begin(), d->total.end(), g);
 
     int tsize = d->target.size();
 

@@ -12,12 +12,11 @@
 ;;
 ;; or in one go
 ;;
-;;   guix shell -C -D -f guix.scm -- bash --init-file <(echo "mkdir -p /usr/bin && ln -s \$GUIX_ENVIRONMENT/bin/env /usr/bin/env && cd build")
+;;   guix shell -C -D -f guix.scm -- bash --init-file <(echo "mkdir -p /usr/bin && ln -s \$GUIX_ENVIRONMENT/bin/env /usr/bin/env && ln -v -s $GUIX_ENVIRONMENT/bin/bash /bin/bash && cd build")
 ;;
-;;   cd build
 ;;   cmake  -DCMAKE_BUILD_TYPE=Debug -DOPENMP=OFF -DASAN=ON ..
-;;   cmake  -DCMAKE_BUILD_TYPE=Debug ..
-;;   cmake --build .
+;;   make -j 12
+;;   ctest .
 ;;
 ;; debug example
 ;;
@@ -29,7 +28,9 @@
 ;;
 ;;   guix shell -C -D -f guix.scm --expose=/home/wrk/opt/zig-linux-x86_64-0.11.0-dev.987+a1d82352d/=/zig
 ;;
-;; and add /zig to the PATH.
+;; and add /zig to the PATH. E.g.
+;;
+;;   export PATH=/zig:$PATH
 
 (use-modules
   ((guix licenses) #:prefix license:)
@@ -56,8 +57,9 @@
   (gnu packages python)
   (gnu packages python-xyz) ; for pybind11
   (gnu packages ruby)
+  (gnu packages time)
   (gnu packages tls)
-  (gnu packages zig)
+  ;; (gnu packages zig)
   (srfi srfi-1)
   (ice-9 popen)
   (ice-9 rdelim))
@@ -70,28 +72,30 @@
 (define-public vcflib-git
   (package
     (name "vcflib-git")
-    (version (git-version "1.0.3" "HEAD" %git-commit))
+    (version (git-version "1.0.10" "HEAD" %git-commit))
     (source (local-file %source-dir #:recursive? #t))
     (build-system cmake-build-system)
     (inputs
-     `(("autoconf" ,autoconf) ;; htslib build requirement
-       ("automake" ,automake) ;; htslib build requirement
-       ("openssl" ,openssl) ;; htslib build requirement
-       ("curl" ,curl) ;; htslib build requirement
-       ("fastahack" ,fastahack)
-       ;; ("gcc" ,gcc-11)    ;; test against latest
+     `(("autoconf" ,autoconf)   ;; htslib build requirement
+       ("automake" ,automake)   ;; htslib build requirement
+       ("openssl" ,openssl)     ;; htslib build requirement
+       ("curl" ,curl)           ;; htslib build requirement
+       ("fastahack" ,fastahack) ;; dev version not in Debian
+       ;; ("gcc" ,gcc-13)       ;; test against latest - won't build python bindings
        ("gdb" ,gdb)
        ("htslib" ,htslib)
-       ("pandoc" ,pandoc) ;; for generation man pages
+       ("pandoc" ,pandoc)       ;; for generation man pages
        ("perl" ,perl)
        ("python" ,python)
        ("python-pytest" ,python-pytest)
        ("pybind11" ,pybind11)
-       ("ruby" ,ruby) ;; for generating man pages
-       ("smithwaterman" ,smithwaterman)
+       ("ruby" ,ruby)           ;; for generating man pages
+       ("smithwaterman" ,smithwaterman) ;; dev version not in Debian
        ("tabixpp" ,tabixpp)
+       ("time" ,time) ;; for tests
+       ("wfa2-lib" ,wfa2-lib) ; alternative:  cmake  -DCMAKE_BUILD_TYPE=Debug -DWFA_GITMODULE=ON -DZIG=ON ..
        ("xz" ,xz)
-       ("zig" ,zig) ;; note we use zig-0.9.1
+       ;; ("zig" ,zig) ; for when zig gets up-to-date on Guix
        ("zlib" ,zlib)))
     (native-inputs
      `(("pkg-config" ,pkg-config)))
