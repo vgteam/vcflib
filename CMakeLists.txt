@@ -464,10 +464,12 @@ if (NOT BUILD_ONLY_LIB)
 endif()
 
 # ---- Python bindings - mostly for testing at this stage
-pybind11_add_module(pyvcflib "${CMAKE_SOURCE_DIR}/src/pythonffi.cpp")
-add_dependencies(pyvcflib ${vcflib_DEPS})
-target_link_libraries(pyvcflib PUBLIC vcflib ${vcflib_LIBS} ${WFALIB})
-install(TARGETS pyvcflib LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if (pybind11_FOUND)
+  pybind11_add_module(pyvcflib "${CMAKE_SOURCE_DIR}/src/pythonffi.cpp")
+  add_dependencies(pyvcflib ${vcflib_DEPS})
+  target_link_libraries(pyvcflib PUBLIC vcflib ${vcflib_LIBS} ${WFALIB})
+  install(TARGETS pyvcflib LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 # ---- Test
 
