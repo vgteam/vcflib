@@ -8,12 +8,15 @@
 */
 
 #include "Variant.h"
-#include <getopt.h>
-#include "Fasta.h"
 #include "gpatInfo.hpp"
-#include <algorithm>
+#include "convert.h"
+#include "join.h"
+
+#include <getopt.h>
+#include <Fasta.h>
 #include <list>
 #include <set>
+
 
 using namespace std;
 using namespace vcflib;
@@ -35,20 +38,6 @@ void printSummary(char** argv) {
          << endl;
     cerr << endl << "Type: transformation" << endl << endl;
     exit(0);
-}
-
-bool isPhased(Variant& var) {
-    for (map<string, map<string, vector<string> > >::iterator s = var.samples.begin(); s != var.samples.end(); ++s) {
-        map<string, vector<string> >& sample = s->second;
-        map<string, vector<string> >::iterator g = sample.find("GT");
-        if (g != sample.end()) {
-            string gt = g->second.front();
-            if (gt.size() > 1 && gt.find("|") == string::npos) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
 
 int main(int argc, char** argv) {
@@ -168,7 +157,7 @@ int main(int argc, char** argv) {
                 cout << cluster.front() << endl;
                 cluster.clear();
             }
-        } else if (isPhased(var)) {
+        } else if (var.isPhased()) {
             if (cluster.empty()
                 || cluster.back().sequenceName == var.sequenceName
                 && var.position - cluster.back().position + cluster.back().ref.size() - 1 <= windowsize) {
@@ -385,8 +374,7 @@ int main(int argc, char** argv) {
             outputVar.format = cluster.front().format;
 
             // now the genotypes
-            for (vector<string>::iterator s = var.sampleNames.begin(); s != var.sampleNames.end(); ++s) {
-                string& sampleName = *s;
+            for (auto& sampleName : var.sampleNames) {
                 vector<string> gt;
                 vector<vector<int> > & hs = sampleHaplotypes[sampleName];
                 for (vector<vector<int> >::iterator h = hs.begin(); h != hs.end(); ++h) {

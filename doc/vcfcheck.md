@@ -61,8 +61,8 @@ Type: metrics
 
 # LICENSE
 
-Copyright 2011-2024 (C) Erik Garrison and vcflib contributors. MIT licensed.
-Copyright 2020-2024 (C) Pjotr Prins.
+Copyright 2011-2026 (C) Erik Garrison and vcflib contributors. MIT licensed.
+Copyright 2020-2026 (C) Pjotr Prins.
 
 <!--
   Created with ./scripts/bin2md.rb scripts/bin2md-template.erb

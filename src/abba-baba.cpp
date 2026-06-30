@@ -9,17 +9,12 @@
 
 #include "Variant.h"
 #include "split.h"
-#include "cdflib.hpp"
-#include "pdflib.hpp"
 #include "var.hpp"
 
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
+#include <ctime>
 #include <getopt.h>
 #include "gpatInfo.hpp"
 
@@ -84,7 +79,7 @@ int  sample_het(int &rv){
 }
 
 
-int  containsAlt(string gt){
+int  containsAlt(const string& gt){
   if(gt == "1/1"){
     return 1;
   }
@@ -108,7 +103,7 @@ int  containsAlt(string gt){
 
 
 // flag as unused func'n
-int  containsRef(string gt){
+int  containsRef(const string& gt){
   if(gt == "0/1"){
     return 1;
   }
@@ -128,17 +123,17 @@ int  containsRef(string gt){
   return 0;
 }
 
-void loadIndices(vector<int> & tree, string set){
+void loadIndices(vector<int> & tree, const string& set){
 
-  vector<string>  indviduals = split(set, ",");
+  const vector<string>  individuals = split(set, ',');
 
-  if(indviduals.size() < 4){
-    cerr << "FATAL: the abba-baba requires four indviduals provided to the tree option" << endl;
+  if(individuals.size() < 4){
+    cerr << "FATAL: the abba-baba requires four individuals provided to the tree option" << endl;
     exit(1);
   }
-  for( vector<string>::iterator it = indviduals.begin(); it != indviduals.end(); it++){
+  for(const auto& individual : individuals){
 
-    int indx = atoi((*it).c_str());
+    int indx = atoi(individual.c_str());
     cerr << indx << endl; //print sample index for user check
     tree.push_back(indx);
   }

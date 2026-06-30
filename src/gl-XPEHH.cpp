@@ -9,16 +9,13 @@
 
 #include "Variant.h"
 #include "split.h"
-#include "cdflib.hpp"
 #include "pdflib.hpp"
+#include "index.hpp"
 
 #include <string>
 #include <iostream>
-#include <math.h>  
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
+#include <ctime>
 #include <getopt.h>
 
 using namespace std;
@@ -61,14 +58,12 @@ void initPop(pop & population){
 
 void loadPop( vector< map< string, vector<string> > >& group, pop & population, string seqid, long int pos, int phased){
 
-  vector< map< string, vector<string> > >::iterator targ_it = group.begin();
-  
   population.seqid = seqid;
   population.pos   = pos  ;
     
-  for(; targ_it != group.end(); targ_it++){
+  for(auto& target : group){
     
-    string genotype = (*targ_it)["GT"].front();
+    string genotype = target["GT"].front();
     
     vector<double> phreds;
     
@@ -78,9 +73,9 @@ void loadPop( vector< map< string, vector<string> > >& group, pop & population, 
 
       if(genotype != "./."){
 	
-	double pa  = exp( unphred((*targ_it)["PL"][0])) ; 
-	double pab = exp( unphred((*targ_it)["PL"][1])) ; 
-	double pbb = exp( unphred((*targ_it)["PL"][2])) ; 
+	double pa  = exp( unphred(target["PL"][0])) ;
+	double pab = exp( unphred(target["PL"][1])) ;
+	double pbb = exp( unphred(target["PL"][2])) ;
 	
 	double norm = pa + pab + pbb  ;
 	
@@ -183,18 +178,7 @@ void loadPop( vector< map< string, vector<string> > >& group, pop & population, 
   }  
 }
 
-void loadIndices(map<int, int> & index, string set){
-  
-  vector<string>  indviduals = split(set, ",");
-
-  vector<string>::iterator it = indviduals.begin();
-  
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
-
-void calc(string haplotypes[][2], int nhaps, vector<long int> pos, vector<int> & target, vector<int> & background, string state, string seqid){
+void calc(string haplotypes[][2], int /*nhaps*/, vector<long int> pos, vector<int> & target, vector<int> & background, string state, string seqid){
 
   for(int snp = 0; snp < haplotypes[0][0].length(); snp++){
     
@@ -330,7 +314,7 @@ void appendHaplotypes(string tmpHaplotypes[][2], string haplotypes[][2], int nta
   }
 }
 
-void loadPhased(string haplotypes[][2], list<pop> & window, int ntarget){
+void loadPhased(string haplotypes[][2], list<pop> & window, int /*ntarget*/){
   for(list<pop>::iterator pos = window.begin(); pos != window.end(); pos++){
     int indIndex = 0;
     for(vector<int>::iterator ind = pos->geno_index.begin(); ind != pos->geno_index.end(); ind++){
@@ -433,16 +417,16 @@ int main(int argc, char** argv) {
 
   // set region to scaffold
 
-  string region = "NA"; 
+  string region = "NA";
 
   // using vcflib; thanks to Erik Garrison 
 
   VariantCallFile variantFile;
 
   // zero based index for the target and background indivudals 
-  
+
   map<int, int> it, ib;
-  
+
   // deltaaf is the difference of allele frequency we bother to look at 
 
   // ancestral state is set to zero by default
@@ -450,7 +434,7 @@ int main(int argc, char** argv) {
   string mut = "1";
 
   int counts = 0;
-  
+
   // phased 
 
   int phased = 0;
@@ -604,7 +588,7 @@ int main(int argc, char** argv) {
     while (variantFile.getNextVariant(var)) {
         map<string, map<string, vector<string> > >::iterator s     = var.samples.begin(); 
         map<string, map<string, vector<string> > >::iterator sEnd  = var.samples.end();
-        
+
 	// biallelic sites naturally 
 
 	if(var.alt.size() > 1){
@@ -672,7 +656,7 @@ int main(int argc, char** argv) {
             localPhase(haplotypes, zdat, (it.size() + ib.size()));
           }
           else{
-            loadPhased(haplotypes, zdat, (it.size() + ib.size()));
+            loadPhased(haplotypes, zdat);
           }
           while(!zdat.empty()){
             zdat.pop_front();
@@ -684,7 +668,7 @@ int main(int argc, char** argv) {
       localPhase(haplotypes, zdat, (it.size() + ib.size()));
     }
     else{
-      loadPhased(haplotypes, zdat, (it.size() + ib.size()));
+      loadPhased(haplotypes, zdat);
     }
     while(!zdat.empty()){
       zdat.pop_front();

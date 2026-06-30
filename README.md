@@ -3,7 +3,7 @@
 ### A C++ library for parsing and manipulating VCF files.
 
 [![Github-CI](https://github.com/vcflib/vcflib/actions/workflows/ci_test.yml/badge.svg?branch=master)](https://github.com/vcflib/vcflib/actions)
-[![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/version.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![GuixBadge](https://img.shields.io/badge/gnuguix-vcflib-brightgreen.svg)](https://packages.guix.gnu.org/packages/vcflib/) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
+[![AnacondaBadge](https://anaconda.org/bioconda/vcflib/badges/version.svg)](https://anaconda.org/bioconda/vcflib) [![DL](https://anaconda.org/bioconda/vcflib/badges/downloads.svg)](https://anaconda.org/bioconda/vcflib) [![BrewBadge](https://img.shields.io/badge/%F0%9F%8D%BAbrew-vcflib-brightgreen.svg)](https://github.com/brewsci/homebrew-bio) [![DebianBadge](https://badges.debian.net/badges/debian/testing/libvcflib-dev/version.svg)](https://packages.debian.org/testing/libvcflib-dev) [![C++0x](https://img.shields.io/badge/Language-C++0x-steelblue.svg)](https://www.cprogramming.com/c++11/what-is-c++0x.html) [![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#vcflib:matrix.org)
 
 Vcflib and related tools are the workhorses in bioinformatics for processing the VCF variant calling format. See
 
@@ -16,17 +16,18 @@ Garrison E, Kronenberg ZN, Dawson ET, Pedersen BS, Prins P (2022), PLoS Comput B
 
 ![Humpty Logo - CC0 license](./logos/humpty-dumpty.jpg)
 
+**May 2025**: fixes, updates and downloadable binaries. See [RELEASE_NOTES.md](./RELEASE_NOTES.md)
+
 **November 2024**: a fresh release with, mostly, pangenome related fixes.
 
 **January 2023**: this is vcflib's first *Humpty Dumpty* release: [vcfcreatemulti](./doc/vcfcreatemulti.md) is the natural companion to [vcfwave](./doc/vcfwave.md).
 Often variant callers are not perfect.
+
 **vcfwave** with its companion tool **vcfcreatemulti** can take an existing VCF file that contains multiple complex overlapping and even nested alleles and, unlike Humpty Dumpty, take them apart and put them together again.
 Thereby, hopefully, creating sane VCF output that is useful for analysis and getting rid of false positives.
 
 We created these tools by including the state-of-the-art [biWFA](https://github.com/smarco/WFA2-lib) wavefront aligner.
 The tools are particularly useful for the output from structural variation callers and pangenome genotypers, such as used by the Human Pangenome Reference Consortium (HPRC) because of overlapping ALT segments.
-
-See also [RELEASE_NOTES.md](./RELEASE_NOTES.md)
 
 **May 2022**: the [vcflib paper](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009123) has been published on PLoS Computational Biology!
 
@@ -124,6 +125,16 @@ guix package -i vcflib
 ```
 
 See also the Guix shell below.
+
+### Static binaries, Docker and Singularity
+
+Images are available from [files.genenetwork.org](https://files.genenetwork.org/software/vcflib/).
+
+For singularity simply run someting like:
+
+```
+singularity exec vcflib-version-singularity.pack.gz vcfcreatemulti -h
+```
 
 ## USAGE
 
@@ -372,7 +383,7 @@ Build dependencies can be viewed in the github-CI scripts (see badges above), as
 - htslib
 - tabixpp
 - WFA2 (wfa2lib)
-- pybind11 (for testing)
+- pybind11 (for python bindings and testing)
 
 For include files add
 
@@ -382,7 +393,7 @@ For include files add
 
 And for some of the VCF executables
 
-- zig 0.13 (disable with cmake -DZIG=OFF)
+- zig 0.15 (disable with cmake -DZIG=OFF)
 - python
 - perl
 
@@ -393,17 +404,17 @@ Note you need to add the full path before running cmake and make. From the build
 
 ```sh
 cd build
-export PATH=$(pwd)/../zig-linux-x86_64-0.13.0:$PATH
+export PATH=$(pwd)/../zig-linux-x86_64-0.15.0:$PATH
 zig version
 cmake  -DCMAKE_BUILD_TYPE=Debug -DWFA_GITMODULE=1 ..
 make VERBOSE=1
 ```
 
-More on `zig` can be found in the souce code [README](./src/zig/README.md).
+More on `zig` can be found in the source code [README](./src/zig/README.md).
 
 ### Using a recent C++ compiler
 
-You may encounter something like libstdc++.so.6: version `GLIBCXX_3.4.32' not found (required by ...vcflib/build/pyvcflib.cpython-310-x86_64-linux-gnu.so). This is caused by the python pyvcflib not running against a python interpreter compiled with the same libstdc++ dependency. That is a bit nasty to solve. For now make sure to match C++ compilers for the python module.
+You may encounter something like libstdc++.so.6: version `GLIBCXX_3.4.32' not found (required by ...vcflib/build/pyvcflib.cpython-310-x86_64-linux-gnu.so). This is caused by the python pyvcflib not running against a python interpreter compiled with the same libstdc++ dependency. That is a bit nasty to solve. For now make sure to match C++ compilers for the python module. It is also possible to disable the python build.
 
 ### Using a different htslib
 
@@ -466,6 +477,23 @@ you to add a working test case as described in 'adding tests'.
 ## LICENSE
 
 This software is distributed under the free software [MIT LICENSE](./LICENSE).
+
+## RELEASES
+
+vcflib is released on github. The tarballs are used by Linux distributions to build and release vcflib binaries.
+For a release the following protocol is followed:
+
+- [ ] Build and test using a recent `guix pull` -- see [guix.scm](./guix.scm) header
+- [ ] Update RELEASE_NOTES checking git record since last release
+- [ ] Bump VERSION file
+- [ ] Update documentation to reflect latest (see CMakeLists.txt)
+- [ ] Check issue tracker for information
+- [ ] Create github release after pushing and checking CI
+- [ ] Copy release notes to github release
+- [ ] Add full tarball with git submodules for conda and such
+- [ ] Add static binaries for vcfwave, vcfcreatemulti, etc and provide download link
+
+See also [RELEASE_NOTES.md](./RELEASE_NOTES.md)
 
 ## CREDIT
 

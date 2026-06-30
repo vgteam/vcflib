@@ -8,21 +8,17 @@
 */
 
 #include "Variant.h"
-#include "split.h"
-#include "cdflib.hpp"
-#include "pdflib.hpp"
 #include "var.hpp"
+#include "index.hpp"
 
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
+#include <ctime>
 #include <getopt.h>
+#include <memory>
+
 #include "gpatInfo.hpp"
-#include "makeUnique.h"
 
 using namespace std;
 using namespace vcflib;
@@ -70,18 +66,6 @@ double bound(double v){
   }
   return v;
 }
-
-void loadIndices(map<int, int> & index, string set){
-
-  vector<string>  indviduals = split(set, ",");
-
-  vector<string>::iterator it = indviduals.begin();
-
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
-
 
 int main(int argc, char** argv) {
 
@@ -232,22 +216,21 @@ int main(int argc, char** argv) {
 	    index += 1;
 	}
 
-  using Detail::makeUnique;
 
-	unique_ptr<genotype> populationTarget      ;
+	std::unique_ptr<genotype> populationTarget      ;
 	unique_ptr<genotype> populationBackground  ;
 
 	if(type == "PL"){
-	  populationTarget     = makeUnique<pl>();
+	  populationTarget     = std::make_unique<pl>();
 	}
 	if(type == "GL"){
-	  populationTarget     = makeUnique<gl>();
+	  populationTarget     = std::make_unique<gl>();
 	}
 	if(type == "GP"){
-	  populationTarget     = makeUnique<gp>();
+	  populationTarget     = std::make_unique<gp>();
 	}
 	if(type == "GT"){
-    populationTarget     = makeUnique<gt>();
+    populationTarget     = std::make_unique<gt>();
 	}
 
 	populationTarget->loadPop(target, var.position);

@@ -1,14 +1,17 @@
 #include "cigar.hpp"
+#include "join.h"
+#include "convert.h"
+
+#include <iostream>
 
 namespace vcflib {
 
 // generates cigar from allele parsed by parsedAlternates
 // Note: this function is not used in vcflib
-string varCigar(vector<VariantAllele>& vav, bool xForMismatch) {
+string varCigar(const vector<VariantAllele>& vav, bool xForMismatch) {
     string cigar;
     pair<int, string> element;
-    for (vector<VariantAllele>::iterator v = vav.begin(); v != vav.end(); ++v) {
-        VariantAllele& va = *v;
+    for (const auto& va : vav) {
         if (va.ref != va.alt) {
             if (element.second == "M") {
                 cigar += convert(element.first) + element.second;
@@ -44,8 +47,8 @@ string mergeCigar(const string& c1, const string& c2) {
         cigar1.back().first += cigar2.front().first;
         cigar2.erase(cigar2.begin());
     }
-    for (vector<pair<int, char> >::iterator c = cigar2.begin(); c != cigar2.end(); ++c) {
-        cigar1.push_back(*c);
+    for (const auto& c : cigar2) {
+        cigar1.push_back(c);
     }
     return joinCigar(cigar1);
 }
@@ -55,21 +58,21 @@ vector<pair<int, char> > splitUnpackedCigar(const string& cigarStr) {
     int num = 0;
     char type = cigarStr[0];
     // cerr << "[" << cigarStr << "]" << endl; // 18,12,14
-    for (char c: cigarStr) {
+    for (const char c: cigarStr) {
         // cerr << "[" << c << "]";
         if (isdigit(c)) {
           cerr << "Is this a valid unpacked CIGAR? <" << cigarStr << ">?" << endl;
           exit(1);
         }
         if (c != type) {
-          cigar.push_back(make_pair(num, type));
+          cigar.emplace_back(num, type);
           //cerr << num << ":" << type << ", ";
           type = c;
           num = 0;
         }
         num += 1;
     }
-    cigar.push_back(make_pair(num, type));
+    cigar.emplace_back(num, type);
     //cerr << num << ":" << type << ", ";
     return cigar;
 }
@@ -79,8 +82,7 @@ vector<pair<int, char> > splitCigar(const string& cigarStr) {
     string number;
     char type = '\0';
     // strings go [Number][Type] ...
-    for (string::const_iterator s = cigarStr.begin(); s != cigarStr.end(); ++s) {
-        char c = *s;
+    for (const auto c : cigarStr) {
         if (isdigit(c)) {
             if (type == '\0') {
                 number += c;
@@ -106,8 +108,7 @@ list<pair<int, char> > splitCigarList(const string& cigarStr) {
     string number;
     char type = '\0';
     // strings go [Number][Type] ...
-    for (string::const_iterator s = cigarStr.begin(); s != cigarStr.end(); ++s) {
-        char c = *s;
+    for (const auto c : cigarStr) {
         if (isdigit(c)) {
             if (type == '\0') {
                 number += c;
@@ -130,9 +131,9 @@ list<pair<int, char> > splitCigarList(const string& cigarStr) {
 
 vector<pair<int, char> > cleanCigar(const vector<pair<int, char> >& cigar) {
     vector<pair<int, char> > cigarClean;
-    for (vector<pair<int, char> >::const_iterator c = cigar.begin(); c != cigar.end(); ++c) {
-        if (c->first > 0) {
-            cigarClean.push_back(*c);
+    for (const auto& c : cigar) {
+        if (c.first > 0) {
+            cigarClean.push_back(c);
         }
     }
     return cigarClean;
@@ -141,11 +142,10 @@ vector<pair<int, char> > cleanCigar(const vector<pair<int, char> >& cigar) {
 string joinCigar(const vector<pair<int, char> >& cigar) {
     string cigarStr;
     bool has_error = false;
-    for (auto c: cigar) {
-        auto len = c.first;
+    for (const auto& [len, c]: cigar) {
         if (len < 0) has_error = true;
         if (len != 0) {
-            cigarStr += convert(len) + c.second;
+            cigarStr += convert(len) + c;
         }
     }
     if (has_error) {
@@ -157,20 +157,20 @@ string joinCigar(const vector<pair<int, char> >& cigar) {
 
 string joinCigarList(const list<pair<int, char> >& cigar) {
     string cigarStr;
-    for (list<pair<int, char> >::const_iterator c = cigar.begin(); c != cigar.end(); ++c) {
-        cigarStr += convert(c->first) + c->second;
+    for (const auto& [len, c] : cigar) {
+        cigarStr += convert(len) + c;
     }
     return cigarStr;
 }
 
 int cigarRefLen(const vector<pair<int, char> >& cigar) {
-    int len = 0;
-    for (vector<pair<int, char> >::const_iterator c = cigar.begin(); c != cigar.end(); ++c) {
-        if (c->second == 'M' || c->second == 'D' || c->second == 'X') {
-            len += c->first;
+    int totalLen = 0;
+    for (const auto& [len, c] : cigar) {
+        if (c == 'M' || c == 'D' || c == 'X') {
+            totalLen += len;
         }
     }
-    return len;
+    return totalLen;
 }
 
 bool isEmptyCigarElement(const pair<int, char>& elem) {
@@ -182,8 +182,7 @@ vector<pair<int, string> > old_splitCigar(const string& cigarStr) {
     string number;
     string type;
     // strings go [Number][Type] ...
-    for (string::const_iterator s = cigarStr.begin(); s != cigarStr.end(); ++s) {
-        char c = *s;
+    for (const auto c : cigarStr) {
         if (isdigit(c)) {
             if (type.empty()) {
                 number += c;
@@ -206,9 +205,9 @@ vector<pair<int, string> > old_splitCigar(const string& cigarStr) {
 
 string old_joinCigar(const vector<pair<int, string> >& cigar) {
     string cigarStr;
-    for (vector<pair<int, string> >::const_iterator c = cigar.begin(); c != cigar.end(); ++c) {
-        if (c->first) {
-            cigarStr += convert(c->first) + c->second;
+    for (const auto& [len, c] : cigar) {
+        if (len) {
+            cigarStr += convert(len) + c;
         }
     }
     return cigarStr;
@@ -216,9 +215,9 @@ string old_joinCigar(const vector<pair<int, string> >& cigar) {
 
 string old_joinCigar(const vector<pair<int, char> >& cigar) {
     string cigarStr;
-    for (vector<pair<int, char> >::const_iterator c = cigar.begin(); c != cigar.end(); ++c) {
-        if (c->first) {
-            cigarStr += convert(c->first) + string(1, c->second);
+    for (const auto& [len, c] : cigar) {
+        if (len) {
+            cigarStr += convert(len) + string(1, c);
         }
     }
     return cigarStr;

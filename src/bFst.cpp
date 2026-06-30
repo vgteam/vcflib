@@ -8,16 +8,13 @@
 */
 
 #include "Variant.h"
-#include "split.h"
 #include "pdflib.hpp"
+#include "index.hpp"
 
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
+#include <ctime>
 #include <getopt.h>
 #include "gpatInfo.hpp"
 
@@ -40,7 +37,7 @@ struct pop{
 
 };
 
-double unphred(string phred){
+double unphred(const string& phred){
   double unphred = atof(phred.c_str());
   unphred = unphred / -10;
   return unphred;
@@ -59,20 +56,17 @@ void initPop(pop & population){
 }
 
 void loadPop( vector< map< string, vector<string> > >& group, pop & population){
-
-  vector< map< string, vector<string> > >::iterator targ_it = group.begin();
-
   int index = 0;
 
-  for(; targ_it != group.end(); targ_it++){
+  for(auto& target : group){
 
-    string genotype = (*targ_it)["GT"].front();
+    string genotype = target["GT"].front();
 
     vector<double> phreds;
 
-    phreds.push_back( unphred((*targ_it)["PL"][0]));
-    phreds.push_back( unphred((*targ_it)["PL"][1]));
-    phreds.push_back( unphred((*targ_it)["PL"][2]));
+    phreds.push_back( unphred(target["PL"][0]));
+    phreds.push_back( unphred(target["PL"][1]));
+    phreds.push_back( unphred(target["PL"][2]));
 
     double scaled ;
     double norm   = log(exp(phreds[0]) + exp(phreds[1]) + exp(phreds[2]));
@@ -197,18 +191,16 @@ double likelihood(pop & population, double af, double fis){
 
   phardy(genotypeProbs, af, fis);
 
-  vector<int>::iterator it = population.geno_index.begin();
-
   int geno_indx = 0;
 
-  for(; it != population.geno_index.end(); it++){
+  for(const auto idx : population.geno_index){
 
     double aa = population.unphred_p[geno_indx][0] + log(genotypeProbs[0]);
     double ab = population.unphred_p[geno_indx][1] + log(genotypeProbs[1]);
     double bb = population.unphred_p[geno_indx][2] + log(genotypeProbs[2]);
     double norm = exp(aa) + exp(ab) + exp(bb);
 
-    double prop = population.unphred_p[geno_indx][*it] +  log(genotypeProbs[*it]);
+    double prop = population.unphred_p[geno_indx][idx] +  log(genotypeProbs[idx]);
 
     loglikelihood += (prop - norm);
 
@@ -332,18 +324,6 @@ int cmp(const void *x, const void *y)
   if (xx < yy) return -1;
   if (xx > yy) return  1;
   return 0;
-}
-
-
-void loadIndices(map<int, int> & index, string set){
-
-  vector<string>  indviduals = split(set, ",");
-
-  vector<string>::iterator it = indviduals.begin();
-
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
 }
 
 

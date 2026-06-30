@@ -19,19 +19,20 @@
 #include <iostream>
 #include <fstream>
 #include <utility>
-#include <stdlib.h>
-#include <assert.h>
+#include <cassert>
 #include <stack>
 #include <queue>
 #include <set>
-#include <functional>
-#include <cstdio>
 #include "split.h"
-#include "join.h"
-#include <tabix.hpp>
 #include "convert.h"
-#include "rkmh.hpp"
-#include "LeftAlign.hpp"
+#include "join.h"
+#include "cigar.hpp"
+#include <memory>
+#include <functional>
+#include <tabix.hpp>
+#include <Fasta.h>
+
+#include "allele.hpp"
 
 // The following includes moved into their sources because of lib dependencies
 // #include <SmithWatermanGotoh.h>
@@ -108,7 +109,7 @@ public:
     vector<string> infoIds(void);
     vector<string> formatIds(void);
 
-    bool open(string& filename) {
+    bool open(const string& filename) {
         vector<string> filenameParts = split(filename, ".");
         if (filenameParts.back() == "gz" || filenameParts.back() == "bgz") {
             return openTabix(filename);
@@ -117,16 +118,17 @@ public:
         }
     }
 
-    bool openFile(string& filename) {
+    bool openFile(const string& filename) {
         file = &_file;
         _file.open(filename.c_str(), ifstream::in);
         parsedHeader = parseHeader();
         return parsedHeader;
     }
 
-    bool openTabix(string& filename) {
+    bool openTabix(const string& filename) {
         usingTabix = true;
-        tabixFile = new Tabix(filename);
+        // Tabix does not modify the string, better to keep rest of the interface clean
+        tabixFile = new Tabix(const_cast<string&>(filename));
         parsedHeader = parseHeader();
         return parsedHeader;
     }
@@ -180,8 +182,8 @@ public:
 
     bool getNextVariant(Variant& var);
 
-    bool setRegion(string region);
-    bool setRegion(string seq, long int start, long int end = 0);
+    bool setRegion(const string& region);
+    bool setRegion(const string& seq, long int start, long int end = 0);
     vector<string> getHeaderLinesFromFile();
 
 private:
@@ -223,14 +225,40 @@ public:
                                                          float gapOpenPenalty = 15.0f,
                                                          float gapExtendPenalty = 6.66f,
                                                          float repeatGapExtendPenalty = 0.0f,
-                                                         string flankingRefLeft = "",
-                                                         string flankingRefRight = "");
+                                                         const string& flankingRefLeft = "",
+                                                         const string& flankingRefRight = "");
 
     // the same output format as parsedAlternates, without parsing
     map<string, vector<VariantAllele> > flatAlternates(void);
 
     map<string, string> extendedAlternates(long int newPosition, long int length);
 
+    /**
+     * Convert a structural variant to the canonical VCF4.3 format using a reference.
+     *   Meturns true if the variant is canonicalized, false otherwise.
+     *   May NOT be called twice on the same variant; it will fail an assert.
+     *   Returns false for non-SVs
+     *   place_seq: if true, the ref/alt fields are
+     *       filled in with the corresponding sequences
+     *     from the reference (and optionally insertion FASTA)
+     * min_size_override: If a variant is less than this size,
+     *     and it has a valid REF and ALT, consider it canonicalized
+     *     even if the below conditions are not true.
+     * Fully canonicalized variants (which are greater than min_size_override)
+     * guarantee the following:
+     *  - POS <= END and corresponds to the anchoring base for symbolic alleles
+     *  - SVLEN info field is set and is positive for all variants except DELs
+     *  - SVTYPE info field is set and is in {DEL, INS, INV, DUP}
+     *  - END info field is set to the POS + len(REF allele) - 1 and corresponds to the final affected reference base
+     *  - Insertions get an upper-case SEQ info field
+     *  - REF and ALT are upper-case if filled in by this function
+     *  - canonical = true;
+     * TODO: CURRENTLY: canonical requires there be only one alt allele
+    **/
+    bool canonicalize(FastaReference& ref,
+         vector<FastaReference*> insertions,
+         bool place_seq = true,
+         int min_size_override = 0);
 
     /**
      * Returns true if the variant's ALT contains a symbolic allele like <INV>
@@ -243,6 +271,23 @@ public:
      */
     bool hasSVTags() const;
 
+    /**
+     * This returns true if the variant appears able to be handled by
+     * canonicalize(). It checks if it has fully specified sequence, or if it
+     * has a defined SV type and length/endpoint.
+     */
+    bool canonicalizable();
+
+    /**
+     * This gets set to true after canonicalize() has been called on the variant, if it succeeded.
+     */
+    bool canonical;
+
+    /**
+     * Get the maximum zero-based position of the reference affected by this variant.
+     * Only works reliably for variants that are not SVs or for SVs that have been canonicalize()'d.
+     */
+    int getMaxReferencePos();
 
     /**
      * Return the SV type of the given alt, or "" if there is no SV type set for that alt.
@@ -297,12 +342,12 @@ public:
     bool getInfoValueBool(const string& key, int index = INDEX_NONE);
     double getInfoValueFloat(const string& key, int index = INDEX_NONE);
     string getInfoValueString(const string& key, int index = INDEX_NONE);
-    void printAlt(ostream& out);      // print a comma-sep list of alternate alleles to an ostream
-    void printAlleles(ostream& out);  // print a comma-sep list of *all* alleles to an ostream
+    void printAlt(ostream& out) const;      // print a comma-sep list of alternate alleles to an ostream
+    void printAlleles(ostream& out) const;  // print a comma-sep list of *all* alleles to an ostream
     int getAltAlleleIndex(const string& allele);
     void updateAlleleIndexes(void);
     void addFormatField(const string& key);
-    void setOutputSampleNames(vector<string>& outputSamples);
+    void setOutputSampleNames(const vector<string>& outputSamples);
     map<pair<int, int>, int> getGenotypeIndexesDiploid(void);
     int getNumSamples(void);
     int getNumValidGenotypes(void);
@@ -314,7 +359,7 @@ public:
 	map<string, pair<vector<VariantAllele>, bool> > varAlleles,
 	VariantCallFile &variantFile,
 	Variant var,
-	string parseFlag,
+	const string& parseFlag,
 	bool keepInfo=true,
 	bool keepGeno=true,
 	bool debug=false);
@@ -354,7 +399,7 @@ public:
                        };
 
     // constructor
-    RuleToken(string token, map<string, VariantFieldType>& variables);
+    RuleToken(const string& token, map<string, VariantFieldType>& variables);
     RuleToken(void)
         : type(BOOLEAN_VARIABLE)
         , state(false)

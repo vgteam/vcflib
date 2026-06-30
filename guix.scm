@@ -1,28 +1,33 @@
 ;; To use this file to build HEAD of vcflib:
 ;;
 ;;   guix build -f guix.scm
+;;   guix build -L . vcflib-local-htslib-git  # test local htslib build - fails because of path rewrites, use shell for now
+;;   guix build -L . vcflib-static-git --tune=native
 ;;
 ;; To get a development container (emacs shell will work)
 ;;
-;;   guix shell -C -D -f guix.scm
+;;   guix shell -C -D -F -f guix.scm
 ;;
-;; For the tests you need /usr/bin/env. In a container create it with
-;;
-;;   mkdir -p /usr/bin /bin ; ln -v -s $GUIX_ENVIRONMENT/bin/env /usr/bin/env ; ln -v -s $GUIX_ENVIRONMENT/bin/bash /bin/bash
-;;
-;; or in one go
-;;
-;;   guix shell -C -D -f guix.scm -- bash --init-file <(echo "mkdir -p /usr/bin && ln -s \$GUIX_ENVIRONMENT/bin/env /usr/bin/env && ln -v -s $GUIX_ENVIRONMENT/bin/bash /bin/bash && cd build")
-;;
+;;   mkdir -p build ; cd build
 ;;   cmake  -DCMAKE_BUILD_TYPE=Debug -DOPENMP=OFF -DASAN=ON ..
-;;   make -j 12
+;;   make -j 12 VERBOSE=1
 ;;   ctest .
+;;   cmake --build . --target man # generate documentation
+;;   cmake --install .
 ;;
-;; debug example
+;; in guix shell debug example:
 ;;
 ;;   env LD_LIBRARY_PATH=$GUIX_ENVIRONMENT/lib gdb --args vcfallelicprimitives -m ../samples/10158243.vcf
 ;;
-;; zig compiler
+;; environment for static binaries:
+;;
+;;   guix shell -L . -C -D -F vcflib-static-git
+;;
+;; environment for building with local htslib:
+;;
+;;   guix shell -L . -C -D -F vcflib-local-htslib-git
+;;
+;; support other (external) zig compiler
 ;;
 ;; To bring in a recent zig compiler I do something like
 ;;
@@ -32,71 +37,108 @@
 ;;
 ;;   export PATH=/zig:$PATH
 
-(use-modules
-  ((guix licenses) #:prefix license:)
-  (guix gexp)
-  (guix packages)
-  (guix git-download)
-  (guix build-system cmake)
-  (gnu packages algebra)
-  (gnu packages autotools)
-  (gnu packages base)
-  (gnu packages compression)
-  (gnu packages bioinformatics)
-  (gnu packages build-tools)
-  (gnu packages check)
-  (gnu packages curl)
-  (gnu packages gcc)
-  (gnu packages gdb)
-  (gnu packages haskell-xyz) ; pandoc for help files
-  (gnu packages llvm)
-  (gnu packages parallel)
-  (gnu packages perl)
-  (gnu packages perl6)
-  (gnu packages pkg-config)
-  (gnu packages python)
-  (gnu packages python-xyz) ; for pybind11
-  (gnu packages ruby)
-  (gnu packages time)
-  (gnu packages tls)
-  ;; (gnu packages zig)
-  (srfi srfi-1)
-  (ice-9 popen)
-  (ice-9 rdelim))
+
+(define-module (guix)
+  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix build-system cmake)
+  #:use-module (guix download)
+  #:use-module (guix gexp)
+  #:use-module (guix git-download)
+  #:use-module (guix packages)
+  #:use-module (guix utils)
+  #:use-module (gnu packages algebra)
+  #:use-module (gnu packages autotools)
+  #:use-module (gnu packages base)
+  #:use-module (gnu packages bioinformatics)
+  #:use-module (gnu packages build-tools)
+  #:use-module (gnu packages check)
+  #:use-module (gnu packages compression)
+  #:use-module (gnu packages curl)
+  #:use-module (gnu packages gcc)
+  #:use-module (gnu packages gdb)
+  #:use-module (gnu packages haskell-xyz) ; pandoc for help files
+  #:use-module (gnu packages llvm)
+  #:use-module (gnu packages parallel)
+  #:use-module (gnu packages perl)
+  #:use-module (gnu packages perl6)
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages python)
+  #:use-module (gnu packages python-xyz) ; for pybind11
+  #:use-module (gnu packages ruby)
+  #:use-module (gnu packages time)
+  #:use-module (gnu packages tls)
+  #:use-module (gnu packages zig)
+  #:use-module (ice-9 popen)
+  #:use-module (ice-9 rdelim)
+  #:use-module (srfi srfi-1)
+  )
 
 (define %source-dir (dirname (current-filename)))
 
 (define %git-commit
     (read-string (open-pipe "git show HEAD | head -1 | cut -d ' ' -f 2" OPEN_READ)))
 
+(define %version
+  (read-string (open-pipe "git describe --always --tags --long|tr -d $'\n'" OPEN_READ)))
+
+;; wfa2-lib v2.3.6 with cstdint fix, pkg-config and tests
+(define-public wfa2-lib/fixed
+  (package
+    (name "wfa2-lib")
+    (version "2.3.6")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/smarco/WFA2-lib")
+                    (commit (string-append "v" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "0hfgq09r0ndrsa2jwy9wkg8p7xzgvclbj5ysp73bawwkgwpgfhy4"))))
+    (build-system cmake-build-system)
+    (native-inputs
+     (list pkg-config time))
+    (arguments
+     (list
+      #:configure-flags
+      #~(list "-DCMAKE_BUILD_TYPE=RelWithDebInfo")))
+    (home-page "https://github.com/smarco/WFA2-lib")
+    (synopsis "Wavefront alignment algorithm library")
+    (description "The wavefront alignment (WFA) algorithm is an exact
+gap-affine algorithm that takes advantage of homologous regions between the
+sequences to accelerate the alignment process.")
+    (properties '((tunable? . #t)))
+    (license license:expat)))
+
 (define-public vcflib-git
   (package
     (name "vcflib-git")
-    (version (git-version "1.0.10" "HEAD" %git-commit))
+    (version %version)
     (source (local-file %source-dir #:recursive? #t))
     (build-system cmake-build-system)
+    ;; (arguments
+    ;; `(#:tests? #t
+    ;;   #:configure-flags
+    ;;   ,#~(list
+    ;;       ;; "-DBUILD_OPTIMIZED=ON"       ;; we don't use the standard cmake optimizations
+    ;;       "-DCMAKE_BUILD_TYPE=Debug"))) ;; to optimize use guix --tune=march-type (e.g. --tune=native)
     (inputs
-     `(("autoconf" ,autoconf)   ;; htslib build requirement
-       ("automake" ,automake)   ;; htslib build requirement
-       ("openssl" ,openssl)     ;; htslib build requirement
-       ("curl" ,curl)           ;; htslib build requirement
-       ("fastahack" ,fastahack) ;; dev version not in Debian
-       ;; ("gcc" ,gcc-13)       ;; test against latest - won't build python bindings
-       ("gdb" ,gdb)
-       ("htslib" ,htslib)
-       ("pandoc" ,pandoc)       ;; for generation man pages
-       ("perl" ,perl)
-       ("python" ,python)
-       ("python-pytest" ,python-pytest)
-       ("pybind11" ,pybind11)
-       ("ruby" ,ruby)           ;; for generating man pages
-       ("smithwaterman" ,smithwaterman) ;; dev version not in Debian
-       ("tabixpp" ,tabixpp)
-       ("time" ,time) ;; for tests
-       ("wfa2-lib" ,wfa2-lib) ; alternative:  cmake  -DCMAKE_BUILD_TYPE=Debug -DWFA_GITMODULE=ON -DZIG=ON ..
-       ("xz" ,xz)
-       ;; ("zig" ,zig) ; for when zig gets up-to-date on Guix
-       ("zlib" ,zlib)))
+     ;; ("gcc" ,gcc-13)       ;; test against latest - won't build python bindings
+     (list
+       fastahack    ;; dev version not in Debian
+       htslib ;; disable to test local build - with local package below
+       pandoc ; for man pages
+       perl
+       python
+       python-pytest
+       pybind11
+       ruby ; for man pages
+       smithwaterman
+       tabixpp
+       time ; for tests
+       wfa2-lib/fixed ; alternative:  cmake  -DCMAKE_BUILD_TYPE=Debug -DWFA_GITMODULE=ON -DZIG=ON ..
+       xz
+       zig-0.15)) ; older versions of zig will not work
     (native-inputs
      `(("pkg-config" ,pkg-config)))
     (home-page "https://github.com/vcflib/vcflib/")
@@ -107,5 +149,124 @@ and operating on records of genomic variation as it can be described by the VCF
 format, and a collection of command-line utilities for executing complex
 manipulations on VCF files.")
     (license license:expat)))
+
+(define-public vcflib-test-one-git
+  "Build and test one target"
+  (package
+    (inherit vcflib-git)
+    (name "vcflib-test-one-git")
+    (arguments
+     `(#:tests? #t
+       #:configure-flags
+       ,#~(list
+           ;; "-DBUILD_OPTIMIZED=ON"       ;; we don't use the standard cmake optimizations
+           "-DCMAKE_BUILD_TYPE=Debug") ;; to optimize use guix --tune=march-type (e.g. --tune=native)
+       #:phases
+       ,#~(modify-phases %standard-phases
+                         (delete 'install)
+                         (replace 'build
+                                  (lambda* (#:key make-flags #:allow-other-keys)
+                                    (invoke "make" "-j 12" "pyvcflib")))
+                         (replace 'check
+                                  (lambda* (#:key tests? #:allow-other-keys)
+                                    (when tests?
+                                      (invoke "ctest" "-R" "pyvcflib" "--verbose")))))))))
+
+
+(define-public vcflib-local-htslib-git
+  "Test embedded htslib - part of tabixpp submodule"
+  (package
+    (inherit vcflib-git)
+    (name "vcflib-local-htslib-git")
+    (arguments
+     (list
+      #:tests? #t
+      #:configure-flags
+      #~(list "-DCMAKE_BUILD_TYPE=Generic")
+      #:phases
+      #~(modify-phases %standard-phases
+          (add-after 'unpack 'fix-htslib-configure
+            (lambda _
+              ;; In the Guix build sandbox /bin/sh does not exist.
+              ;; Set CONFIG_SHELL so autoconf tools use the right
+              ;; shell in configure and generated config.status.
+              (setenv "CONFIG_SHELL" (which "bash"))
+              ;; Patch CMakeLists.txt so ExternalProject uses bash
+              ;; to invoke configure.
+              (substitute* "CMakeLists.txt"
+                (("CONFIGURE_COMMAND ./configure")
+                 (string-append "CONFIGURE_COMMAND "
+                                (which "bash")
+                                " ./configure"))))))))
+    (inputs
+     (modify-inputs (package-inputs vcflib-git)
+                    (delete "htslib" "tabixpp" "fastahack" "wfa2-lib/fixed")
+                    (prepend
+                     autoconf  ;; htslib build requirements
+                     automake
+                     libdeflate
+                     openssl
+                     curl)))))
+
+
+;; ==== The following is for static binary builds using gcc - used mostly for deployment ===
+
+;; Guix does not come with a static version of libdeflate
+(define-public libdeflate-static
+  (package
+    (inherit libdeflate)
+    (name "libdeflate-static")
+    (version "1.19")
+    (arguments
+     (list #:configure-flags
+           #~(list "-DLIBDEFLATE_BUILD_STATIC_LIB=YES"
+                   "-DLIBDEFLATE_BUILD_TESTS=YES")))))
+
+;; A minimal static version of htslib that does not depend on curl and openssl. This
+;; reduces the number of higher order dependencies in static linking.
+(define-public htslib-static
+  (package
+    (inherit htslib)
+    (name "htslib-static")
+    (version "1.19")
+    (source (origin
+            (method url-fetch)
+            (uri (string-append
+                  "https://github.com/samtools/htslib/releases/download/"
+                  version "/htslib-" version ".tar.bz2"))
+            (sha256
+             (base32
+              "0dh79lwpspwwfbkmllrrhbk8nkvlfc5b5ib4d0xg5ld79w6c8lc7"))))
+    (arguments
+     (substitute-keyword-arguments (package-arguments htslib)
+       ((#:configure-flags flags ''())
+        ''())))
+    (inputs
+     (list bzip2 xz))))
+
+(define-public vcflib-static-git
+  "Optimized for latest AMD architecture build and static deployment.
+These binaries can be copied to HPC."
+  (package
+    (inherit vcflib-git)
+    (name "vcflib-static-git")
+    (arguments
+     `(#:tests? #t
+       #:configure-flags
+       ,#~(list
+           "-DBUILD_STATIC=ON"
+           ;; "-DZIG=OFF"
+           ;; "-DBUILD_OPTIMIZED=ON"    ;; we don't use the standard cmake optimizations
+           "-DCMAKE_BUILD_TYPE=Generic" ;; to optimize use guix --tune=march-type (e.g. --tune=native)
+           "-DCMAKE_INSTALL_RPATH=")))   ; force cmake static build and do not rewrite RPATH
+    (inputs
+     (modify-inputs (package-inputs vcflib-git)
+                    (prepend
+                     `(,bzip2 "static")
+                     `(,zlib "static")
+                     `(,xz "static")
+                     libdeflate-static
+                     htslib-static)))))
+
 
 vcflib-git

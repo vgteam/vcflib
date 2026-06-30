@@ -3,14 +3,14 @@ on: [push, pull_request]
 jobs:
   arch:
     name: vcflib-CI
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
-    runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        python-version: [3.8]
+          include:
+              - os: ubuntu-24.04
+                python-version: "3.13"
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+    runs-on: ${{ matrix.os }}
     steps:
     - name: apt update
       run: sudo apt-get -o Acquire::Retries=3 update
@@ -21,18 +21,21 @@ jobs:
         libtabixpp-dev
         libtabixpp0
         pybind11-dev
+    - name: install libbz2-dev for 24.04
+      if: matrix.os == 'ubuntu-24.04'
+      run: sudo apt-get -o Acquire::Retries=3 install -y -V libbz2-dev # needed for ubuntu 24.04
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
     - name: install zig using wget
       run: |
-        wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
-        tar xf zig-linux-x86_64-*.tar.xz
-        ./zig-linux-x86_64-*/zig version
+        wget -q https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
+        tar xf zig-x86_64-*.tar.xz
+        ./zig-x86_64-*/zig version
         pwd
-        ls -l zig-linux-*
-        echo "$(pwd)/zig-linux-x86_64-0.13.0" >> $GITHUB_PATH
+        ls -l zig-*
+        echo "$(pwd)/zig-x86_64-linux-0.15.2" >> $GITHUB_PATH
         # echo "$(pwd)/zig-linux-x86_64-*" >> $GITHUB_PATH
         # echo "::add-path::./zig-linux*"
         echo GITHUB_PATH=$GITHUB_PATH
@@ -42,8 +45,8 @@ jobs:
       run: git submodule update --init --recursive
     - name: Configure
       run: |
-        echo $(pwd)/zig-linux-x86_64-* >> $GITHUB_PATH
-        echo "$(pwd)/zig-linux-x86_64-0.13.0" >> $GITHUB_PATH
+        echo $(pwd)/zig-x86_64-* >> $GITHUB_PATH
+        echo "$(pwd)/zig-x86_64-linux-0.15.2" >> $GITHUB_PATH
         echo GITHUB_PATH=$GITHUB_PATH
         echo PATH=$PATH
         zig version

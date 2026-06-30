@@ -8,7 +8,7 @@
 */
 
 #include "Variant.h"
-#include "split.h"
+
 #include <string>
 #include <iostream>
 #include <set>
@@ -46,11 +46,11 @@ int main(int argc, char** argv) {
     Variant var(variantFile);
 
     vector<string> fieldsToErase;
-    vector<string> infoIds = variantFile.infoIds();
-    for (vector<string>::iterator i = infoIds.begin(); i != infoIds.end(); ++i) {
-        if (!fieldsToKeep.count(*i)) {
-            fieldsToErase.push_back(*i);
-            variantFile.removeInfoHeaderLine(*i);
+    const vector<string> infoIds = variantFile.infoIds();
+    for (const auto& infoId : infoIds) {
+        if (!fieldsToKeep.count(infoId)) {
+            fieldsToErase.push_back(infoId);
+            variantFile.removeInfoHeaderLine(infoId);
         }
     }
 
@@ -59,14 +59,18 @@ int main(int argc, char** argv) {
 
     // print the records, filtering is done via the setting of varA's output sample names
     while (variantFile.getNextVariant(var)) {
-        for (map<string, vector<string> >::iterator i = var.info.begin(); i != var.info.end(); ++i) {
+        for (map<string, vector<string> >::iterator i = var.info.begin(); i != var.info.end(); ) {
             if (!fieldsToKeep.count(i->first)) {
                 i = var.info.erase(i);
+            } else {
+                ++i;
             }
         }
-        for (map<string, bool>::iterator i = var.infoFlags.begin(); i != var.infoFlags.end(); ++i) {
+        for (map<string, bool>::iterator i = var.infoFlags.begin(); i != var.infoFlags.end(); ) {
             if (!fieldsToKeep.count(i->first)) {
                 i = var.infoFlags.erase(i);
+            } else {
+                ++i;
             }
         }
         cout << var << endl;

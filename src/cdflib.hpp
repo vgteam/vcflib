@@ -6,6 +6,7 @@
 
     This software is published under the MIT License. See the LICENSE file.
 */
+#pragma once
 
 double algdiv ( double *a, double *b );
 double alnrel ( double *a );
@@ -105,7 +106,7 @@ double fifdsign ( double mag, double sign );
 long fifidint ( double a );
 long fifmod ( long a, long b );
 double fpser ( double *a, double *b, double *x, double *eps );
-void ftnstop ( string msg );
+void ftnstop ( const string& msg );
 double gam1 ( double *a );
 void gamma_inc ( double *a, double *x, double *ans, double *qans, int *ind );
 void gamma_inc_inv ( double *a, double *x, double *x0, double *p, double *q,

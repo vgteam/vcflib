@@ -8,21 +8,19 @@
 */
 
 #include "Variant.h"
-#include "split.h"
-#include "cdflib.hpp"
-#include "pdflib.hpp"
 #include "var.hpp"
-#include "makeUnique.h"
+#include "index.hpp"
+#include "gpatInfo.hpp"
+#include "phase.hpp"
+
 
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
+#include <ctime>
 #include <getopt.h>
-#include "gpatInfo.hpp"
+#include <memory>
+
 
 using namespace std;
 using namespace vcflib;
@@ -52,26 +50,18 @@ void printHelp(void){
   exit(1);
 }
 
-void clearHaplotypes(string **haplotypes, int ntarget){
-  for(int i= 0; i < ntarget; i++){
-    haplotypes[i][0].clear();
-    haplotypes[i][1].clear();
+void clearHaplotypes(std::vector<std::pair<std::string, std::string>>& haplotypes) {
+  for(int i= 0; i < haplotypes.size(); i++){
+    haplotypes[i].first.clear();
+    haplotypes[i].second.clear();
   }
 }
 
-void loadIndices(map<int, int> & index, string set){
+void calc(const std::vector<std::pair<std::string, std::string>>& haplotypes, int ,
+	const vector<long int>& pos, const vector<double>& tafs, const vector<double>& bafs, int external,
+	long int, int derived, const vector<int> & target, const vector<int> &, const string& seqid){
 
-  vector<string>  indviduals = split(set, ",");
-  vector<string>::iterator it = indviduals.begin();
-
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
-
-void calc(string **haplotypes, int nhaps, vector<long int> pos, vector<double> tafs, vector<double> bafs, int external, long int window, int derived, vector<int> & target, vector<int> & background, string seqid){
-
-  for(int long snpA = 0; snpA < haplotypes[0][0].length() - 100; snpA++){
+  for(int long snpA = 0; snpA < haplotypes[0].first.length() - 100; snpA++){
 
     double sumLD = 0;
     double nLD   = 0;
@@ -85,13 +75,13 @@ void calc(string **haplotypes, int nhaps, vector<long int> pos, vector<double> t
       targetHaplotypes["10"] = 1;
       targetHaplotypes["00"] = 1;
 
-      for(int targetIndex = 0; targetIndex < target.size(); targetIndex++ ){
+      for(const auto currentTarget : target){
 
 	string haplotypeA;
 	string haplotypeB;
 
-	haplotypeA += haplotypes[target[targetIndex]][0].substr(snpA, 1) +=  haplotypes[target[targetIndex]][0].substr(snpB, 1);
-	haplotypeB += haplotypes[target[targetIndex]][1].substr(snpA, 1) +=  haplotypes[target[targetIndex]][1].substr(snpB, 1);
+	haplotypeA += haplotypes[currentTarget].first.substr(snpA, 1) +=  haplotypes[currentTarget].first.substr(snpB, 1);
+	haplotypeB += haplotypes[currentTarget].second.substr(snpA, 1) +=  haplotypes[currentTarget].second.substr(snpB, 1);
 
 	targetHaplotypes[haplotypeA]++;
 	targetHaplotypes[haplotypeB]++;
@@ -133,17 +123,8 @@ void calc(string **haplotypes, int nhaps, vector<long int> pos, vector<double> t
 
 }
 
-void loadPhased(string **haplotypes, genotype * pop, int ntarget){
-
-  int indIndex = 0;
-
-  for(vector<string>::iterator ind = pop->gts.begin(); ind != pop->gts.end(); ind++){
-    string g = (*ind);
-    vector< string > gs = split(g, "|");
-    haplotypes[indIndex][0].append(gs[0]);
-    haplotypes[indIndex][1].append(gs[1]);
-    indIndex += 1;
-  }
+int get_value(int derived) {
+	return derived;
 }
 
 int main(int argc, char** argv) {
@@ -262,7 +243,7 @@ int main(int argc, char** argv) {
 	    }
 	  case 'd':
 	    {
-	      derived == 1;
+	      get_value(derived) == 1;
 	      cerr << "INFO: count haplotypes \"11\" rather than \"00\"" << endl;
 	      break;
 	    }
@@ -341,11 +322,8 @@ int main(int argc, char** argv) {
     vector<double>   targetAFS;
     vector<double>   backgroundAFS;
 
-    string **haplotypes = new string*[nsamples];
-	for (int i = 0; i < nsamples; i++) {
-	  haplotypes[i] = new string[2];
-	}
-
+    std::vector<std::pair<std::string, std::string>> haplotypes(nsamples);
+	
     string currentSeqid = "NA";
 
     while (variantFile.getNextVariant(var)) {
@@ -361,10 +339,10 @@ int main(int argc, char** argv) {
       }
 
       if(currentSeqid != var.sequenceName){
-	if(haplotypes[0][0].length() > 10){
+	if(haplotypes[0].first.length() > 10){
 	  calc(haplotypes, nsamples, positions, targetAFS, backgroundAFS, external, derived, windowSize, target_h, background_h, currentSeqid);
 	}
-	clearHaplotypes(haplotypes, nsamples);
+	clearHaplotypes(haplotypes);
 	positions.clear();
 	currentSeqid = var.sequenceName;
 	targetAFS.clear();
@@ -390,26 +368,25 @@ int main(int argc, char** argv) {
 	sindex += 1;
       }
 
-      using Detail::makeUnique;
 
-      unique_ptr<genotype> populationTarget    ;
-      unique_ptr<genotype> populationBackground;
+      std::unique_ptr<genotype> populationTarget    ;
+      std::unique_ptr<genotype> populationBackground;
       unique_ptr<genotype> populationTotal     ;
 
       if(type == "PL"){
-	populationTarget     = makeUnique<pl>();
-	populationBackground = makeUnique<pl>();
-	populationTotal      = makeUnique<pl>();
+	populationTarget     = std::make_unique<pl>();
+	populationBackground = std::make_unique<pl>();
+	populationTotal      = std::make_unique<pl>();
       }
       if(type == "GL"){
-	populationTarget     = makeUnique<gl>();
-	populationBackground = makeUnique<gl>();
-	populationTotal      = makeUnique<gl>();
+	populationTarget     = std::make_unique<gl>();
+	populationBackground = std::make_unique<gl>();
+	populationTotal      = std::make_unique<gl>();
       }
       if(type == "GP"){
-	populationTarget     = makeUnique<gp>();
-	populationBackground = makeUnique<gp>();
-	populationTotal      = makeUnique<gp>();
+	populationTarget     = std::make_unique<gp>();
+	populationBackground = std::make_unique<gp>();
+	populationTotal      = std::make_unique<gp>();
       }
 
       populationTarget->loadPop(target,         var.position);
@@ -426,7 +403,7 @@ int main(int argc, char** argv) {
       targetAFS.push_back(populationTarget->af);
       backgroundAFS.push_back(populationBackground->af);
       positions.push_back(var.position);
-      loadPhased(haplotypes, populationTotal.get(), nsamples);
+      loadPhased(haplotypes, populationTotal.get());
 
     }
 

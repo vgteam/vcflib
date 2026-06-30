@@ -8,7 +8,6 @@
 */
 
 #include "legacy.h"
-#include "split.h"
 #include "convert.h"
 #include <getopt.h>
 
@@ -507,9 +506,9 @@ int main(int argc, char** argv) {
 
     // and maximum mnp
     int maxmnp = 0;
-    for (map<int, int>::iterator i = mnps.begin(); i != mnps.end(); ++i) {
-        if (i->first > maxmnp) {
-            maxmnp = i->first;
+    for (const auto& i : mnps) {
+        if (i.first > maxmnp) {
+            maxmnp = i.first;
         }
     }
 

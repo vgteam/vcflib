@@ -9,20 +9,18 @@
 
 #include "Variant.h"
 #include "split.h"
-#include "cdflib.hpp"
 #include "pdflib.hpp"
 #include "var.hpp"
+#include "index.hpp"
+#include "gpatInfo.hpp"
+#include "phase.hpp"
 
+#include <memory>
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
 #include <getopt.h>
-#include "gpatInfo.hpp"
-#include "makeUnique.h"
+
 // maaas speed
 
 #if defined HAS_OPENMP
@@ -169,31 +167,19 @@ void loadGeneticMap(int start, int end){
   }
 }
 
-
-void clearHaplotypes(string **haplotypes, int ntarget){
-  for(int i= 0; i < ntarget; i++){
-    haplotypes[i][0].clear();
-    haplotypes[i][1].clear();
-  }
+void clearHaplotypes(std::vector<std::pair<std::string, std::string>>& haplotypes) {
+    for (int i = 0; i < haplotypes.size(); i++) {
+        haplotypes[i].first.clear();
+        haplotypes[i].second.clear();
+    }
 }
-
-void loadIndices(map<int, int> & index, string set){
-
-  vector<string>  indviduals = split(set, ",");
-  vector<string>::iterator it = indviduals.begin();
-
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
-
 void countHaps(int nhaps, map<string, int> & targetH,
-	       string **haplotypes, int start, int end){
+	       const std::vector<std::pair<std::string, std::string>>& haplotypes, int start, int end){
 
   for(int i = 0; i < nhaps; i++){
 
-    std::string h1 =  haplotypes[i][0].substr(start, (end - start)) ;
-    std::string h2 =  haplotypes[i][1].substr(start, (end - start)) ;
+    std::string h1 =  haplotypes[i].first.substr(start, (end - start)) ;
+    std::string h2 =  haplotypes[i].second.substr(start, (end - start)) ;
 
     if(targetH.find(h1)  == targetH.end()){
       targetH[h1] = 1;
@@ -210,43 +196,42 @@ void countHaps(int nhaps, map<string, int> & targetH,
   }
 }
 
-void computeNs(map<string, int> & targetH, int start,
-	       int end, double * sumT, char ref, bool dir){
+void computeNs(map<string, int> & targetH, int /*start*/,
+	       int /*end*/, double * sumT, char ref, bool dir){
 
-  for( map<string, int>::iterator th = targetH.begin();
-       th != targetH.end(); th++){
+  for(const auto& th : targetH){
 
-    if(th->second < 2){
+    if(th.second < 2){
       continue;
     }
 
 
     // end is extending ; check first base
     if(dir){
-      if( th->first[0] == ref){
+      if( th.first[0] == ref){
 
 	//	std::cerr << "count dat: " << th->first << " " << th->second << " " << ref << " " << dir << endl;
 
 
-	*sumT += r8_choose(th->second, 2);
+	*sumT += r8_choose(th.second, 2);
       }
     }
 
     // start is extending ; check last base
     else{
 
-      int last = th->first.size() -1;
-      if( th->first[last] == ref ){
+      int last = th.first.size() -1;
+      if( th.first[last] == ref ){
 	//	std::cerr << "count dat:" << th->first << " " << th->second << " " << ref << " " << dir << endl;
 
 
-      	*sumT += r8_choose(th->second, 2);
+      	*sumT += r8_choose(th.second, 2);
       }
     }
   }
 }
 
-bool calcEhh(string **haplotypes, int start,
+bool calcEhh(const std::vector<std::pair<std::string, std::string>>& haplotypes, int start,
 	     int end, char ref, int nhaps,
 	     double * ehh, double  div, bool dir){
 
@@ -268,7 +253,7 @@ bool calcEhh(string **haplotypes, int start,
   return true;
 }
 
-int integrate(string **   haplotypes,
+int integrate(std::vector<std::pair<std::string, std::string>>& haplotypes,
 	      vector<long int> & pos,
 	      bool         direction,
 	      int               maxl,
@@ -340,11 +325,11 @@ int integrate(string **   haplotypes,
   return 10;
 }
 
-void calc(string ** haplotypes, int nhaps,
-	  vector<double> & afs, vector<long int> & pos,
-	  vector<int> & target, vector<int> & background, string seqid){
+void calc(std::vector<std::pair<std::string, std::string>>& haplotypes, int nhaps,
+	  const vector<double> &, vector<long int> & pos,
+	  const vector<int> &, const vector<int> &, const string&){
 
-  int maxl = haplotypes[0][0].length();
+  int maxl = haplotypes[0].first.length();
 
 
   for(int snp = 0; snp < maxl; snp++){
@@ -383,25 +368,12 @@ void calc(string ** haplotypes, int nhaps,
   }
 }
 
-void loadPhased(string **haplotypes, genotype * pop, int ntarget){
-
-  int indIndex = 0;
-
-  for(vector<string>::iterator ind = pop->gts.begin(); ind != pop->gts.end(); ind++){
-    string g = (*ind);
-    vector< string > gs = split(g, "|");
-    haplotypes[indIndex][0].append(gs[0]);
-    haplotypes[indIndex][1].append(gs[1]);
-    indIndex += 1;
-  }
-}
-
 int main(int argc, char** argv) {
 
   globalOpts.threads = 1   ;
   globalOpts.af      = 0.05;
 
-  // zero based index for the target and background indivudals
+  // zero based index for the target and background individuals
 
   map<int, int> it, ib;
 
@@ -558,13 +530,12 @@ int main(int argc, char** argv) {
     vector<string> samples = variantFile.sampleNames;
     int nsamples = samples.size();
 
-    for(vector<string>::iterator samp = samples.begin(); samp != samples.end(); samp++){
-
-      string sampleName = (*samp);
+    // TODO: fix loop
+    for(const auto& _ : samples){
 
       if(it.find(index) != it.end() ){
-	target_h.push_back(indexi);
-	indexi++;
+		target_h.push_back(indexi);
+		indexi++;
       }
       index++;
     }
@@ -574,10 +545,7 @@ int main(int argc, char** argv) {
 
     vector<double> afs;
 
-    string **haplotypes = new string*[target_h.size()];
-    for (int i = 0; i < target_h.size(); i++) {
-      haplotypes[i] = new string[2];
-    }
+    std::vector<std::pair<std::string, std::string>> haplotypes(target_h.size());
 
 
     while (variantFile.getNextVariant(var)) {
@@ -607,21 +575,19 @@ int main(int argc, char** argv) {
 	sindex += 1;
       }
 
-      using Detail::makeUnique;
-
-      unique_ptr<genotype> populationTarget;
+      std::unique_ptr<genotype> populationTarget;
 
       if(globalOpts.type == "PL"){
-	populationTarget     = makeUnique<pl>();
+	populationTarget     = std::make_unique<pl>();
       }
       if(globalOpts.type == "GL"){
-	populationTarget     = makeUnique<gl>();
+	populationTarget     = std::make_unique<gl>();
       }
       if(globalOpts.type == "GP"){
-	populationTarget     = makeUnique<gp>();
+	populationTarget     = std::make_unique<gp>();
       }
       if(globalOpts.type == "GT"){
-	populationTarget     = makeUnique<gt>();
+	populationTarget     = std::make_unique<gt>();
       }
 
       populationTarget->loadPop(target, var.position);
@@ -634,7 +600,7 @@ int main(int argc, char** argv) {
       }
       positions.push_back(var.position);
       afs.push_back(populationTarget->af);
-      loadPhased(haplotypes, populationTarget.get(), populationTarget->gts.size());
+      loadPhased(haplotypes, populationTarget.get());
     }
 
     if(!globalOpts.geneticMapFile.empty()){
@@ -645,7 +611,7 @@ int main(int argc, char** argv) {
 
     calc(haplotypes, target_h.size(), afs, positions,
 	 target_h, background_h, globalOpts.seqid);
-    clearHaplotypes(haplotypes, target_h.size());
+    clearHaplotypes(haplotypes);
 
     exit(0);
 

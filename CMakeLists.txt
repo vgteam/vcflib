@@ -1,7 +1,7 @@
 # For Debian currently with
 #
 #   cd build
-#   cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZIG=OFF ..
+#   cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 #   cmake --build .
 #   ctest .
 #   cmake --install .
@@ -9,29 +9,28 @@
 cmake_minimum_required(VERSION 3.16)
 project(vcflib)
 
-set(CMAKE_CXX_STANDARD 17)
+enable_testing()
 
+set(CMAKE_CXX_STANDARD 17)
 include(ExternalProject)
 include(FeatureSummary)
 include(GNUInstallDirs)
 
+find_package(BZip2 REQUIRED)   # htslib
+find_package(LibLZMA REQUIRED) # htslib
 find_package(PkgConfig REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(pybind11 CONFIG)
 
 include(GNUInstallDirs)
-include(FindBZip2)
-include(FindLibLZMA)
-include(FindZLIB)
-include(FindCURL) # for htslib
 
 feature_summary(
   FATAL_ON_MISSING_REQUIRED_PACKAGES
   WHAT REQUIRED_PACKAGES_NOT_FOUND)
 
-set(CMAKE_POSITION_INDEPENDENT_CODE ON) # for pybind11
-
 # ---- Options
 
+option(BUILD_STATIC "Build static binary" OFF)
 option(BUILD_DOC "Build documentation" ON)
 option(OPENMP "Enable OpenMP" ON) # disabling does not work because of vcfwave
 option(PROFILING "Enable profiling" OFF)
@@ -43,6 +42,15 @@ include(CheckIPOSupported) # adds lto
 check_ipo_supported(RESULT ipo_supported OUTPUT output)
 
 set(EXTRA_FLAGS " ") # otherwise it injects OFF
+
+if (BUILD_STATIC)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+  set(CMAKE_EXE_LINKER_FLAGS "-static")
+  set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
+else ()
+  set(BUILD_SHARED_LIBS ON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON) # for pybind11
+endif ()
 
 # ---- Dependencies
 
@@ -59,7 +67,6 @@ pkg_check_modules(htslib IMPORTED_TARGET htslib)   # Optionally builds from cont
 pkg_check_modules(tabixpp IMPORTED_TARGET tabixpp) # Optionally builds from contrib/
 
 # ---- Build switches
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ${ipo_supported})
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -109,12 +116,12 @@ include_directories(include)
 include_directories(contrib/fastahack)
 include_directories(contrib/intervaltree)
 include_directories(contrib/smithwaterman)
-# include_directories(contrib/multichoose) merged with vcflib
 include_directories(contrib/filevercmp)
 include_directories(contrib/c-progress-bar)
 
 if(NOT htslib_FOUND)
   message(STATUS "Using included htslib")
+  include(FindCURL) # for htslib
   set(htslib_LOCAL contrib/tabixpp/htslib)
   set(tabixpp_FOUND OFF) # also build tabixpp if htslib is missing
 endif()
@@ -134,7 +141,6 @@ endif()
 
 file(GLOB INCLUDES
   src/*.h*
-  # contrib/multichoose/*.h*
   contrib/intervaltree/*.h*
   contrib/smithwaterman/*.h*
   contrib/fastahack/*.h*
@@ -150,12 +156,15 @@ set(vcflib_SOURCE
     ${vcfwfa_SOURCE}
     src/vcf-c-api.cpp
     src/Variant.cpp
-    src/canonicalize.cpp
+    # src/canonicalize.cpp --- merged back into Variant.h, see https://github.com/vcflib/vcflib/issues/417
     src/rnglib.cpp
     src/var.cpp
     src/pdflib.cpp
     src/cdflib.cpp
     src/split.cpp
+    src/stats.cpp
+    src/index.cpp
+    src/phase.cpp
     src/rkmh.cpp
     src/murmur3.cpp
     src/LeftAlign.cpp
@@ -172,11 +181,12 @@ set(vcflib_SOURCE
     contrib/c-progress-bar/progress.c
 )
 
-if (tabixpp_LOCAL) # add the tabixpp source file and use a no-op target
+if (tabixpp_LOCAL) # add the tabixpp source file
     list(APPEND vcflib_SOURCE ${tabixpp_SOURCE})
+    list(APPEND INCLUDES ${tabixpp_LOCAL}/tabix.hpp)
 endif()
 
-add_library(vcflib STATIC
+add_library(vcflib
     ${vcflib_SOURCE}
     )
 
@@ -261,7 +271,6 @@ set(BINS
     vcfinfosummarize
     vcfcreatemulti
 )
-
 
 set(WFBINS # Introduce wavefront dependency
     vcfallelicprimitives
@@ -364,8 +373,7 @@ if(WFA_GITMODULE)
   add_subdirectory(${WFA_LOCAL})
   set(WFALIB wfa2) # pick up the wfa2 lib target from the included CMakeLists.txt
 else(WFA_GITMODULE)
-  include_directories($ENV{CMAKE_PREFIX_PATH}/include/wfa2lib)
-  set(WFA_INCLUDE_DIRS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/wfa2lib)
+  find_path(WFA_INCLUDE_DIRS wavefront/wfa.hpp PATH_SUFFIXES wfa2lib)
   find_library(WFALIB wfa2 wfa REQUIRED) # distro search for shared lib
 endif(WFA_GITMODULE)
 
@@ -380,6 +388,11 @@ MESSAGE(STATUS "WFA using include ${WFA_INCLUDE_DIRS}")
 # external project so we can run 'zig build'
 
 if (ZIG)
+if (BUILD_STATIC)
+  set(ZIG_BUILD_FLAGS "-Doptimize=ReleaseFast")
+else()
+  set(ZIG_BUILD_FLAGS "")
+endif()
 ExternalProject_Add(ZIG-EXT
     SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/zig"
     UPDATE_COMMAND ""
@@ -387,7 +400,7 @@ ExternalProject_Add(ZIG-EXT
     INSTALL_COMMAND ""
     BUILD_IN_SOURCE ON
     BUILD_ALWAYS ON
-    BUILD_COMMAND ${CMAKE_SOURCE_DIR}/src/zig/compile.sh # -Drelease-fast=true -freference-trace
+    BUILD_COMMAND ${CMAKE_SOURCE_DIR}/src/zig/compile.sh ${ZIG_BUILD_FLAGS}
 )
 ExternalProject_Get_property(ZIG-EXT SOURCE_DIR)
 set(ZIG_INCLUDE_DIRS ${SOURCE_DIR})
@@ -404,33 +417,24 @@ else (ZIG)
   add_definitions(-DNO_ZIG=1)
 endif (ZIG)
 
-set(vcflib_DEPS
-  CURL::libcurl
-  )
-
-if (ZIG)
-  list(APPEND vcflib_DEPS ZIG-EXT)
-endif ()
-
-set(vcflib_LIBS
-  ${CURL_LIBRARIES}
-  ${ZLIB_LIBRARIES}
-  ${LIBLZMA_LIBRARIES}
-  ${BZIP2_LIBRARIES}
-  ${CMAKE_THREAD_LIBS_INIT}
-  ${WFA_LINK_LIBRARIES}
-)
-
-if (ZIG)
-  list(APPEND vcflib_LIBS ${ZIG_LINK_LIBRARIES})
-endif()
-
-
 if (htslib_LOCAL)
   target_link_libraries(vcflib htslib)
-else (htslib_LOCAL)
+  set(vcflib_LIBS curl deflate) # local build requires linking curl explicitly
+else ()
   target_link_libraries(vcflib PkgConfig::htslib)
+  set(vcflib_LIBS hts)
 endif()
+
+list(APPEND htslib_dependencies
+  lzma
+  z
+  bz2
+)
+
+list(APPEND vcflib_LIBS
+  ${CMAKE_THREAD_LIBS_INIT}
+  ${htslib_dependencies} # linking htslib for everything is not needed if we have our own bgzip reader
+)
 
 if (NOT tabixpp_LOCAL)
   target_link_libraries(vcflib PkgConfig::tabixpp)
@@ -441,6 +445,10 @@ if(OPENMP)
 endif()
 
 # ---- Build all
+
+if (BUILD_SHARED_LIBS)
+  target_link_libraries(vcflib ${WFALIB})
+endif()
 
 if (NOT BUILD_ONLY_LIB)
   foreach(BIN ${BINS})
@@ -454,24 +462,26 @@ if (NOT BUILD_ONLY_LIB)
     target_link_libraries(${WFBIN} PUBLIC ${vcflib_LIBS} vcflib)
     target_link_libraries(${WFBIN} PUBLIC ${vcflib_LIBS} ${WFALIB})
   endforeach(WFBIN ${BINS})
-  install(TARGETS ${BINS} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  if (ZIG)
+    # list(APPEND vcflib_LIBS ${ZIG_LINK_LIBRARIES})
+    target_link_libraries(vcfcreatemulti PUBLIC ${vcflib_LIBS} ${ZIG_LINK_LIBRARIES} vcflib)
+  endif()
+  install(TARGETS ${BINS} ${WFBINS} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   # ---- Copy scripts
   foreach(SCRIPT ${SCRIPTS})
     install(PROGRAMS ./scripts/${SCRIPT} DESTINATION ${CMAKE_INSTALL_BINDIR} RENAME ${SCRIPT})
   endforeach(SCRIPT ${SCRIPTS})
-
 endif()
 
-# ---- Python bindings - mostly for testing at this stage
-pybind11_add_module(pyvcflib "${CMAKE_SOURCE_DIR}/src/pythonffi.cpp")
-add_dependencies(pyvcflib ${vcflib_DEPS})
-target_link_libraries(pyvcflib PUBLIC vcflib ${vcflib_LIBS} ${WFALIB})
-install(TARGETS pyvcflib LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-# ---- Test
-
-enable_testing()
+if (NOT BUILD_STATIC) # only when not building static
+  # ---- Python bindings - mostly for testing at this stage
+  pybind11_add_module(pyvcflib "${CMAKE_SOURCE_DIR}/src/pythonffi.cpp")
+  # add_dependencies(pyvcflib CURL::libcurl)
+  target_link_libraries(pyvcflib PUBLIC vcflib ${vcflib_LIBS} ${WFALIB})
+  install(TARGETS pyvcflib LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 function(add_pytest TEST_FILE)
   add_test(
@@ -480,7 +490,7 @@ function(add_pytest TEST_FILE)
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
   )
   SET_TESTS_PROPERTIES(${TEST_FILE}
-      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build;;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}")
+      PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_odr_violation=0;LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${CMAKE_BINARY_DIR};LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}:$ENV{GUIX_PROFILE}/lib;PATH=${CMAKE_BINARY_DIR}/bin:$ENV{PATH}")
 endfunction()
 
 function(add_pydoctest TEST_FILE)
@@ -491,9 +501,8 @@ function(add_pydoctest TEST_FILE)
   )
   SET_TESTS_PROPERTIES(${TEST_FILE}
       # PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:symbolize=1;LSAN_OPTIONS=verbosity=2:log_threads=1:suppressions=../test/libasan-suppress.txt")
-      PROPERTIES ENVIRONMENT "LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${PROJECT_SOURCE_DIR}/build:${PROJECT_SOURCE_DIR}/test/pytest")
+      PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_odr_violation=0;LSAN_OPTIONS=suppressions=../test/libasan-suppress.txt;PYTHONPATH=${CMAKE_BINARY_DIR}:${PROJECT_SOURCE_DIR}/test/pytest;LD_LIBRARY_PATH=$ENV{LIBRARY_PATH}:$ENV{GUIX_PROFILE}/lib;PATH=${CMAKE_BINARY_DIR}:$ENV{PATH}")
 endfunction()
-
 
 function(add_doctest TEST_FILE)
   add_test(
@@ -523,8 +532,10 @@ endfunction()
   add_zigtest()
 endif(ZIG_TEST)
 
-add_pytest(realign)
-add_pydoctest(pyvcflib)
+if (NOT BUILD_STATIC)
+  add_pytest(realign)
+  add_pydoctest(pyvcflib)
+endif()
 add_pydoctest(vcflib-api)
 add_pydoctest(vcf2tsv)
 add_pydoctest(vcfallelicprimitives)
@@ -537,7 +548,7 @@ endif (ZIG)
 add_pydoctest(vcfnulldotslashdot)
 add_doctest(doc/vcfintersect)
 
-# ---- Build docs
+# ---- Build documentation
 #
 # Generates man pages for the python doctests. Don't need
 # to run every time so it is a separate command. For pandoc logic see
@@ -583,11 +594,18 @@ endif (PANDOC)
 
 # ---- Install
 
-install(TARGETS vcflib ARCHIVE DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS vcflib
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
 if(WFA_GITMODULE)
-  install(TARGETS ${WFALIB} ARCHIVE DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(TARGETS ${WFALIB} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(WFA_GITMODULE)
 
 install(FILES ${INCLUDES} DESTINATION include/vcflib)
 
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/man/ DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
+configure_file(${CMAKE_SOURCE_DIR}/vcflib.pc.in ${CMAKE_BINARY_DIR}/vcflib.pc @ONLY)
+install(FILES ${CMAKE_BINARY_DIR}/vcflib.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/man/ DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
