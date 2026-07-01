@@ -6,7 +6,7 @@
 	url = https://github.com/ekg/multichoose.git
 [submodule "fastahack"]
 	path = contrib/fastahack
-	url = https://github.com/ekg/fastahack.git
+	url = https://github.com/vgteam/fastahack.git
 [submodule "intervaltree"]
 	path = contrib/intervaltree
 	url = https://github.com/ekg/intervaltree.git
