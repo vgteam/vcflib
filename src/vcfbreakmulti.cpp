@@ -9,7 +9,6 @@
 
 #include "Variant.h"
 #include "convert.h"
-#include <set>
 #include <getopt.h>
 
 using namespace std;
@@ -96,6 +95,7 @@ int main(int argc, char** argv) {
         }
 
         vector<Variant> variants;
+        variants.reserve(numalt);
         for (int i = 0; i < numalt; ++i) {
             variants.push_back(var);
         }
@@ -108,13 +108,13 @@ int main(int argc, char** argv) {
                     altsToRemove.push_back(var.alt.at(j));
                 }
             }
-            for (vector<string>::iterator a = altsToRemove.begin(); a != altsToRemove.end(); ++a) {
-                v.removeAlt(*a);
+            for (const auto& a : altsToRemove) {
+                v.removeAlt(a);
             }
         }
 
-        for (vector<Variant>::iterator v = variants.begin(); v != variants.end(); ++v) {
-            cout << *v << endl;
+        for (auto& v : variants) {
+            cout << v << endl;
         }
     }
 

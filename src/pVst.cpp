@@ -8,25 +8,20 @@
 */
 
 #include "Variant.h"
-#include "split.h"
-#include "cdflib.hpp"
-#include "pdflib.hpp"
 #include "var.hpp"
+#include "index.hpp"
+#include "stats.hpp"
+#include "gpatInfo.hpp"
 
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
+#include <ctime>
 #include <getopt.h>
 #include <algorithm>
 #include <random>
-#include <ctime>
-#include <cstdlib>
-#include <random>
-#include "gpatInfo.hpp"
+#include <sstream>
+
 
 #if defined HAS_OPENMP
 #include <omp.h>
@@ -109,8 +104,8 @@ double bound(double v){
 inline double var(vector<double> & d, double mu){
   double variance = 0;
 
-  for(vector<double>::iterator it = d.begin(); it != d.end(); it++){
-    variance += pow((*it) - mu,2);
+  for(const auto& it : d){
+    variance += pow(it - mu,2);
   }
 
   return variance / (d.size() - 1);
@@ -126,26 +121,6 @@ inline double var(vector<double> & d, double mu){
 
 */
 
-
-inline double mean(vector<int> & data){
-
-  double sum = 0;
-
-  for(vector<int>::iterator it = data.begin(); it != data.end(); it++){
-    sum += (*it);
-  }
-  return sum / data.size();
-}
-
-inline double mean(vector<double> & data){
-
-  double sum = 0;
-
-  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
-    sum += (*it);
-  }
-  return sum / data.size();
-}
 
 double vst(copyNcounts * d){
 
@@ -201,16 +176,15 @@ void calc(copyNcounts * d){
 
     int counter = 0;
 
-    for(std::vector<double>::iterator it = d->total.begin();
-	it!= d->total.end(); it++){
-      if(counter < tsize){
-	d->target.push_back(*it);
-      }
-      else{
-	d->background.push_back(*it);
-      }
-      counter+=1;
-    }
+  	for(const auto t : d->total){
+  		if(counter < tsize){
+  			d->target.push_back(t);
+  		}
+  		else{
+  			d->background.push_back(t);
+  		}
+  		counter+=1;
+  	}
 
     //    std::cerr << "PER\t" << v << "\t" << vst(d) << std::endl;
 
@@ -247,38 +221,25 @@ void calc(copyNcounts * d){
 
 //------------------------------- SUBROUTINE --------------------------------
 
-void loadIndices(map<int, int> & index, string set){
-
-  vector<string>  indviduals = split(set, ",");
-
-  vector<string>::iterator it = indviduals.begin();
-
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
-
 // gotta load the dat so that we can permute using open MP
 void loadDat(copyNcounts * d,
 	     std::string & type,
 	     vector < map< string, vector<string> > > & target,
 	     vector < map< string, vector<string> > > & background){
 
-  for(vector < map< string, vector<string> > >::iterator it
-	= target.begin(); it!= target.end(); it++){
-    d->target.push_back( atof((*it)[type].front().c_str()) );
-    d->total.push_back(  atof((*it)[type].front().c_str()) );
+  for(auto& it : target){
+    d->target.push_back( atof(it[type].front().c_str()) );
+    d->total.push_back(  atof(it[type].front().c_str()) );
 
-    d->targetV += (*it)[type].front();
+    d->targetV += it[type].front();
     d->targetV += ",";
 
   }
-  for(vector < map< string, vector<string> > >::iterator it
-	= background.begin(); it!= background.end(); it++){
-    d->background.push_back( atof((*it)[type].front().c_str()) );
-    d->total.push_back( atof((*it)[type].front().c_str()) );
+  for(auto& it : background){
+    d->background.push_back( atof(it[type].front().c_str()) );
+    d->total.push_back( atof(it[type].front().c_str()) );
 
-    d->backgroundV += (*it)[type].front();
+    d->backgroundV += it[type].front();
     d->backgroundV += ",";
 
   }
@@ -451,9 +412,8 @@ int main(int argc, char** argv) {
       }
 
       std::map<string, bool> formatMap;
-      for(std::vector<std::string>::iterator itz = var.format.begin();
-	  itz != var.format.end(); itz++){
-	formatMap[*itz] = true;
+      for(const auto& itz : var.format){
+		formatMap[itz] = true;
       }
 
       if(formatMap.find(type) == formatMap.end()){

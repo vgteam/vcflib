@@ -8,9 +8,7 @@
 */
 
 #include "Variant.h"
-#include "split.h"
 #include <string>
-#include <list>
 #include <iostream>
 
 using namespace std;
@@ -65,15 +63,15 @@ void annotateWithGenotypes(Variant& varA, Variant& varB, string& annotationTag) 
             string& otherGenotype = other["GT"].front();
             // XXX this must compare the genotypes in the two files
 
-            if (otherGenotype.find("|") != string::npos) {
+            if (otherGenotype.find('|') != string::npos) {
               vector<int> gtB = decomposePhasedGenotype(otherGenotype);
               vector<int> gtnew;
               gtnew.reserve(gtB.size());
 
-              for (vector<int>::iterator g = gtB.begin(); g != gtB.end(); ++g) {
-                map<int, int>::iterator f = varBconvertToVarA.find(*g);
+              for (const int g : gtB) {
+                map<int, int>::iterator f = varBconvertToVarA.find(g);
                 if (f != varBconvertToVarA.end()) {
-                  gtnew.push_back(*g);
+                  gtnew.push_back(g);
                 } else {
                   gtnew.push_back(NULL_ALLELE);
                 }
@@ -82,12 +80,12 @@ void annotateWithGenotypes(Variant& varA, Variant& varB, string& annotationTag) 
             } else {
               map<int, int> gtB = decomposeGenotype(otherGenotype);
               map<int, int> gtnew;
-              for (map<int, int>::iterator g = gtB.begin(); g != gtB.end(); ++g) {
-                map<int, int>::iterator f = varBconvertToVarA.find(g->first);
+              for (const auto& g : gtB) {
+                map<int, int>::iterator f = varBconvertToVarA.find(g.first);
                 if (f != varBconvertToVarA.end()) {
-                  gtnew[f->second] += g->second;
+                  gtnew[f->second] += g.second;
                 } else {
-                  gtnew[NULL_ALLELE] += g->second;
+                  gtnew[NULL_ALLELE] += g.second;
                 }
               }
               sample[annotationTag].push_back(genotypeToString(gtnew));
@@ -211,15 +209,15 @@ int main(int argc, char** argv) {
 
             map<pair<string, string>, Variant> varsAParsed;
             map<pair<string, string>, Variant> varsBParsed;
-            for (vector<Variant>::iterator v = varsA.begin(); v != varsA.end(); ++v) {
-                varsAParsed[make_pair(v->ref, v->alt.front())] = *v;
+            for (const auto& v : varsA) {
+                varsAParsed[make_pair(v.ref, v.alt.front())] = v;
             }
-            for (vector<Variant>::iterator v = varsB.begin(); v != varsB.end(); ++v) {
-                varsBParsed[make_pair(v->ref, v->alt.front())] = *v;
+            for (const auto& v : varsB) {
+                varsBParsed[make_pair(v.ref, v.alt.front())] = v;
             }
 
-            for (map<pair<string, string>, Variant>::iterator vs = varsAParsed.begin(); vs != varsAParsed.end(); ++vs) {
-                Variant& varA = vs->second;
+            for (auto& vs : varsAParsed) {
+                Variant& varA = vs.second;
                 annotateWithBlankGenotypes(varA, annotag);
                 if (varsBParsed.find(make_pair(varA.ref, varA.alt.front())) != varsBParsed.end()) {
                     Variant& varB = varsBParsed[make_pair(varA.ref, varA.alt.front())]; // TODO cleanup
@@ -239,8 +237,7 @@ int main(int argc, char** argv) {
             varA.infoFlags[annotag + ".has_variant"] = true;
             cout << varA << endl;
         } else {
-            for (vector<Variant>::iterator v = varsA.begin(); v != varsA.end(); ++v) {
-                Variant& varA = *v;
+            for (auto& varA : varsA) {
                 annotateWithBlankGenotypes(varA, annotag);
                 cout << varA << endl;
             }

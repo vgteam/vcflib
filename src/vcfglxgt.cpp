@@ -7,9 +7,13 @@
     This software is published under the MIT License. See the LICENSE file.
 */
 
+#include "convert.h"
+
 #include "Variant.h"
 #include "split.h"
 #include <getopt.h>
+
+#include "join.h"
 
 using namespace std;
 using namespace vcflib;
@@ -124,9 +128,9 @@ int main(int argc, char** argv) {
 
                 string& gt = g->second.front();
                 // if we are fixing null but the genotype is fully specified, continue
-                if (fixNull && gt.find(".") == string::npos) continue;
+                if (fixNull && gt.find('.') == string::npos) continue;
                 string splitter = "/";
-                if (gt.find("|") != string::npos) splitter = "|";
+                if (gt.find('|') != string::npos) splitter = "|";
                 int samplePloidy = split(gt, splitter).size();
                 int numAlleles = var.alt.size() + 1; // including reference
 

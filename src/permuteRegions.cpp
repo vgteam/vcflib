@@ -44,22 +44,22 @@ THE SOFTWARE.
 
 
 */
-#include <fstream>
 #include "split.h"
+#include "gpatInfo.hpp"
+#include "stats.hpp"
+
+#include <fstream>
 #include <vector>
 #include <map>
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include "gpatInfo.hpp"
 
 #include <omp.h>
+
 // print lock
 omp_lock_t lock;
 
@@ -216,37 +216,22 @@ int parseOpts(int argc, char** argv)
 
 */
 
-bool getContiguousWindow(vector<score *> & data, vector<double> & load, int n){
+bool getContiguousWindow(const vector<score*> & data, vector<double> & load, int n){
   int r = rand() % data.size();    
 
   if(r+n >= data.size()){
     return false;
   }
 
-  if(data[r]->seqid != data[r+n]->seqid){
+  if(data[r].seqid != data[r+n].seqid){
     return false;
   }
   
   for(int i = r; i < r+n; i++){
-    load.push_back(data[i]->score);
+    load.push_back(data[i].score);
   }
   return true;
 }
-
-
-//------------------------------- SUBROUTINE --------------------------------
-
-double mean(vector<double> & data){
-
-  double sum = 0;
-
-  for(vector<double>::iterator it = data.begin(); it != data.end(); it++){
-    sum += (*it);
-  }
-  return sum / data.size();
-}
-
-
 
 //------------------------------- SUBROUTINE --------------------------------
 /*
@@ -275,7 +260,7 @@ void permute(double s, int n, vector<score *> & data,
       getWindow = getContiguousWindow(data, scores, n);
     }
 
-    double ns = mean(scores);
+    double ns = vcflib::mean(scores);
     
     if(ns > s){
       *nSuc += 1;
@@ -315,7 +300,7 @@ int parse = parseOpts(argc, argv);
    exit(1);
  }
 
- vector< score *> data;
+ vector< score > data;
 
  ifstream wcDat (globalOpts.file.c_str());
 
@@ -339,13 +324,12 @@ int parse = parseOpts(argc, argv);
        }
      }
 
-     score * sp;
-     sp = new score;
-     sp->seqid = region[0]              ;
-     sp->pos   = atoi(region[1].c_str());
-     sp->score = value                  ;
+     data.emplace_back();
+     auto& sp = data.back();
 
-     data.push_back(sp);
+     sp.seqid = region[0]              ;
+     sp.pos   = atoi(region[1].c_str());
+     sp.score = value                  ;
    }
  }
  else{
@@ -361,22 +345,22 @@ int parse = parseOpts(argc, argv);
 
  ifstream smoothedFile (globalOpts.smoothed.c_str());
 
- vector<smoothedInputData*> sData;
+ vector<smoothedInputData> sData;
 
  if(smoothedFile.is_open()){
    while(getline(smoothedFile, line)){
    
      vector<string> region = split(line, "\t");
-     smoothedInputData * sp = new smoothedInputData;
+     sData.emplace_back();
+     auto& sp = sData.back();
 
-     sp->line = line;
-     sp->score = atof(region[globalOpts.valueIndex].c_str());
-     sp->n     = atoi(region[globalOpts.nIndex].c_str());
-     sp->nPer = 0;
-     sp->nSuc = 0;
-     sp->ePv  = 0;
+     sp.line = line;
+     sp.score = atof(region[globalOpts.valueIndex].c_str());
+     sp.n     = atoi(region[globalOpts.nIndex].c_str());
+     sp.nPer = 0;
+     sp.nSuc = 0;
+     sp.ePv  = 0;
      
-     sData.push_back(sp);
    }
  }
  smoothedFile.close();
@@ -385,27 +369,18 @@ int parse = parseOpts(argc, argv);
 
 #pragma omp parallel for schedule(dynamic, 20)
  for(int i = 0; i < sData.size(); i++){
-   permute(sData[i]->score, sData[i]->n, 
-	   data, &sData[i]->nPer, 
-	   &sData[i]->nSuc, &sData[i]->ePv);
+   permute(sData[i].score, sData[i].n, 
+	   data, &sData[i].nPer, 
+	   &sData[i].nSuc, &sData[i].ePv);
    
    omp_set_lock(&lock);
-   cout << sData[i]->line 
-	<< "\t" << sData[i]->nSuc
-	<< "\t" << sData[i]->nPer 
-	<< "\t" << sData[i]->ePv << endl;
+   cout << sData[i].line 
+	<< "\t" << sData[i].nSuc
+	<< "\t" << sData[i].nPer 
+	<< "\t" << sData[i].ePv << endl;
    omp_unset_lock(&lock);
  }
 
- for(vector<score*>::iterator itz = data.begin(); 
-     itz != data.end(); itz++){
-   delete *itz;
- }
- for(vector<smoothedInputData*>::iterator itz = sData.begin();
-     itz != sData.end(); itz++){
-   delete *itz;
- }
-
-
-return 0;
+ 
+ return 0;
 }

@@ -15,6 +15,8 @@
 #include "ssw_cpp.hpp"
 #include <regex>
 
+#include "join.h"
+
 namespace vcflib {
 
 static char rev_arr [26] = {84, 66, 71, 68, 69, 70, 67, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 65,
@@ -67,8 +69,7 @@ std::string toUpper(const std::string& seq) {
 
 bool allATGCN(const string& s, bool allowLowerCase){
     if (allowLowerCase){
-       for (string::const_iterator i = s.begin(); i != s.end(); ++i){
-            char c = *i;
+       for (const auto c : s){
             if (c != 'A' && c != 'a' &&
                 c != 'C' && c != 'c' &&
                 c != 'T' && c != 't' &&
@@ -79,8 +80,7 @@ bool allATGCN(const string& s, bool allowLowerCase){
         }
     }
     else{
-        for (string::const_iterator i = s.begin(); i != s.end(); ++i){
-            char c = *i;
+        for (const auto c : s){
             if (c != 'A' && c != 'C' && c != 'T' && c != 'G' && c != 'N'){
                 return false;
             }
@@ -138,12 +138,12 @@ void Variant::parse(string& line, bool parseSamples) {
     // Process the INFO fields
     if (fields.size() > 7) {
         vector<string> infofields = split(fields.at(7), ';');
-        for (auto field: infofields) {
+        for (const auto& field: infofields) {
             if (field == ".") {
                 continue;
             }
             vector<string> kv = split(field, '='); // note that field gets split in place
-            auto key = kv.at(0);
+            const auto& key = kv.at(0);
             if (kv.size() == 2) {
                 split(kv.at(1), ',', info[key]); // value gets split in place
                 infoOrderedKeys.push_back(key);
@@ -166,26 +166,24 @@ void Variant::parse(string& line, bool parseSamples) {
         vector<string>::iterator sampleName = sampleNames.begin();
         vector<string>::iterator sample = fields.begin() + 9;
         for (; sample != fields.end() && sampleName != sampleNames.end();
-	     ++sample, ++sampleName) {
-	  string& name = *sampleName;
+                ++sample, ++sampleName) {
+			string& name = *sampleName;
 
-	  vector<string> samplefields = split(*sample, ':');
-	  vector<string>::iterator i = samplefields.begin();
+			vector<string> samplefields = split(*sample, ':');
+        	vector<string>::iterator i = samplefields.begin();
 
-	  for (vector<string>::iterator f = format.begin();
-	       f != format.end(); ++f) {
-
-	    if(i != samplefields.end()){
-	      samples[name][*f] = split(*i, ',');
-              ++i;
-	    }
-	    else{
-	      std::vector<string> missing;
-	      missing.push_back(".");
-	      samples[name][*f] = missing;
-	    }
-	  }
-	}
+        	for (const auto& f : format) {
+        		if(i != samplefields.end()){
+        			samples[name][f] = split(*i, ',');
+        			++i;
+        		}
+        		else{
+        			std::vector<string> missing;
+        			missing.push_back(".");
+        			samples[name][f] = missing;
+        		}
+        	}
+                }
 
         if (sampleName != sampleNames.end()) {
             cerr << "error: more sample names in header than sample fields" << endl;
@@ -225,7 +223,7 @@ bool Variant::isSymbolicSV() const{
 
     bool ref_valid = allATGCN(this->ref);
     bool alts_valid = true;
-    for (auto a : this->alt){
+    for (const auto& a : this->alt){
         if (!allATGCN(a)){
             alts_valid = false;
         }
@@ -254,7 +252,463 @@ string Variant::getSVTYPE(int altpos) const{
 
 
 
+int Variant::getMaxReferencePos(){
+    if (this->canonical && this->info.find("END") != this->info.end()) {
+        // We are cannonicalized and must have a correct END
 
+        int end = 0;
+        for (const auto& s : this->info.at("END")){
+            // Get the latest one defined.
+            end = max(abs(stoi(s)), end);
+        }
+        // Convert to 0-based.
+        return end - 1;
+
+    }
+
+    if (!this->isSymbolicSV()){
+        // We don't necessarily have an END, but we don't need one
+        return this->zeroBasedPosition() + this->ref.length() - 1;
+    }
+
+    if (this->canonicalizable()){
+        // We aren't canonical, but we could be.
+        if (this->info.find("END") != this->info.end()){
+            // We have an END; blindly trust it
+            int end = 0;
+            for (const auto& s : this->info.at("END")){
+                // Get the latest one defined.
+                end = max(abs(stoi(s)), end);
+            }
+            // Convert to 0-based.
+            return end - 1;
+
+        }
+        else if (this->info.find("SVLEN") != this->info.end()){
+            // There's no endpoint, but we know an SVLEN.
+            // A negative SVLEN means a deletion, so if we find one we can say we delete that much.
+            int deleted = 0;
+            for (const auto& s : this->info.at("SVLEN")){
+                int alt_len = stoi(s);
+                if (alt_len > 0){
+                    // Not a deletion, so doesn't affect any ref bases
+                    continue;
+                }
+                deleted = max(-alt_len, deleted);
+            }
+
+            // The anchoring base at POS gets added in (because it isn't
+            // deleted) but then subtracted out (because we have to do that to
+            // match non-SV deletions). For insertions, deleted is 0 and we
+            // return 0-based POS. Inversions must have an END.
+            return this->zeroBasedPosition() + deleted;
+        }
+        else{
+            cerr << "Warning: insufficient length information for " << *this << endl;
+            return -1;
+        }
+    }
+    else {
+        cerr << "Warning: can't get end of non-canonicalizeable variant " << *this << endl;
+    }
+    return -1;
+}
+
+
+
+
+// To canonicalize a variant, we need either both REF and ALT seqs filled in
+// or SVTYPE and SVLEN or END or SPAN or SEQ sufficient to define the variant.
+bool Variant::canonicalizable(){
+    bool pre_canon = allATGCN(this->ref);
+
+    for (auto& a : this->alt){
+        if (!allATGCN(a)){
+            pre_canon = false;
+        }
+    }
+
+    if (pre_canon){
+        // It came in in a fully specified way.
+        // TODO: ideally, we'd check to make sure ref/alt lengths, svtypes, and ends line up right here.
+        return true;
+    }
+
+    string svtype = getSVTYPE();
+
+    if (svtype.empty()){
+        // We have no SV type, so we can't interpret things.
+        return false;
+    }
+
+    // Check the tags
+    bool has_len = this->info.count("SVLEN") && !this->info.at("SVLEN").empty();
+    bool has_seq = this->info.count("SEQ") && !this->info.at("SEQ").empty();
+    bool has_span = this->info.count("SPAN") && !this->info.at("SPAN").empty();
+    bool has_end = this->info.count("END") && !this->info.at("END").empty();
+
+
+    if (svtype == "INS"){
+        // Insertions need a SEQ, SVLEN, or SPAN
+        return has_seq || has_len || has_span;
+    }
+    else if (svtype == "DEL"){
+        // Deletions need an SVLEN, SPAN, or END
+        return has_len || has_span || has_end;
+    }
+    else if (svtype == "INV"){
+        // Inversions need a SPAN or END
+        return has_span || has_end;
+    }
+    else{
+        // Other SV types are unsupported
+        // TODO: DUP
+        return false;
+    }
+}
+
+bool Variant::canonicalize(FastaReference& fasta_reference, vector<FastaReference*> insertions, bool place_seq, int min_size){
+
+    // Nobody should call this without checking
+    assert(canonicalizable());
+
+    // Nobody should call this twice
+    assert(!this->canonical);
+
+    // Find where the inserted sequence can come from for insertions
+    bool do_external_insertions = !insertions.empty();
+    FastaReference* insertion_fasta;
+    if (do_external_insertions){
+        insertion_fasta = insertions[0];
+    }
+
+    bool ref_valid = allATGCN(ref);
+
+    if (!ref_valid && !place_seq){
+        // If the reference is invalid, and we aren't allowed to change the ref sequence,
+        // we can't canonicalize the variant.
+        return false;
+    }
+
+    // Check the alts to see if they are not symbolic
+    vector<bool> alt_i_atgcn (alt.size());
+    for (int i = 0; i < alt.size(); ++i){
+        alt_i_atgcn[i] = allATGCN(alt[i]);
+    }
+
+    // Only allow single-alt variants
+    bool single_alt = alt.size() == 1;
+    if (!single_alt){
+        // TODO: this will need to be remove before supporting multiple alleles
+        cerr << "Warning: multiple ALT alleles not yet allowed for SVs" << endl;
+        return false;
+    }
+
+    // Fill in the SV tags
+    string svtype = getSVTYPE();
+    bool has_len = this->info.count("SVLEN") && !this->info.at("SVLEN").empty();
+    bool has_seq = this->info.count("SEQ") && !this->info.at("SEQ").empty();
+    bool has_span = this->info.count("SPAN") && !this->info.at("SPAN").empty();
+    bool has_end = this->info.count("END") && !this->info.at("END").empty();
+
+    // Where is the end, or where should it be?
+    long info_end = 0;
+    if (has_end) {
+        // Get the END from the tag
+        info_end = stol(this->info.at("END")[0]);
+    }
+    else if(ref_valid && !place_seq) {
+        // Get the END from the reference sequence, which is ready.
+        info_end = this->position + this->ref.length() - 1;
+    }
+    else if ((svtype == "DEL" || svtype == "INV") && has_span) {
+        // For deletions and inversions, we can get the END from the SPAN
+        info_end = this->position + abs(stol(this->info.at("SPAN")[0]));
+    }
+    else if (svtype == "DEL" && has_len) {
+        // For deletions, we can get the END from the SVLEN
+        info_end = this->position + abs(stol(this->info.at("SVLEN")[0]));
+    }
+    else if (svtype == "INS"){
+        // For insertions, END is just POS if not specified
+        info_end = this->position;
+    }
+    else{
+        cerr << "Warning: could not set END info " << *this << endl;
+        return false;
+    }
+
+    // Commit back the END
+    this->info["END"].resize(1);
+    this->info["END"][0] = to_string(info_end);
+    has_end = true;
+
+    // What is the variant length change?
+    // We store it as absolute value
+    long info_len = 0;
+    if (has_len){
+        // Get the SVLEN from the tag
+        info_len = abs(stol(this->info.at("SVLEN")[0]));
+    }
+    else if ((svtype == "INS" || svtype == "DEL") && has_span){
+        info_len = abs(stol(this->info.at("SPAN")[0]));
+    }
+    else if (svtype == "DEL"){
+        // We always have the end by now
+        // Deletion ends give you length change
+        info_len = info_end - this->position;
+    }
+    else if (svtype == "INV"){
+        // Inversions have 0 length change unless otherwise specified.
+        info_len = 0;
+    }
+    else if (svtype == "INS" && has_seq) {
+        // Insertions can let us pick it up from the SEQ tag
+        info_len = this->info.at("SEQ").at(0).size();
+    }
+    else{
+        cerr << "Warning: could not set SVLEN info " << *this << endl;
+        return false;
+    }
+
+    // Commit the SVLEN back
+    if (svtype == "DEL"){
+        // Should be saved as negative
+        this->info["SVLEN"].resize(1);
+        this->info["SVLEN"][0] = to_string(-info_len);
+    }
+    else{
+        // Should be saved as positive
+        this->info["SVLEN"].resize(1);
+        this->info["SVLEN"][0] = to_string(info_len);
+    }
+    // Now the length change is known
+    has_len = true;
+
+    // We also compute a span
+    long info_span = 0;
+    if (has_span){
+        // Use the specified span
+        info_span = abs(stol(this->info.at("SVLEN")[0]));
+    }
+    else if (svtype == "INS" || svtype == "DEL"){
+        // has_len is always true here
+        // Insertions and deletions let us determine the span from the length change, unless they are complex.
+        info_span = info_len;
+    }
+    else if (svtype == "INV"){
+        // has_end is always true here
+        // Inversion span is start to end
+        info_span = info_end - this->position;
+    }
+    else{
+        cerr << "Warning: could not set SPAN info " << *this << endl;
+        return false;
+    }
+
+    // Commit the SPAN back
+    this->info["SPAN"].resize(1);
+    this->info["SPAN"][0] = to_string(info_span);
+    // Now the span change is known
+    has_span = true;
+
+    if (info_end < this->position) {
+        cerr << "Warning: SV END is before POS [canonicalize] " <<
+        *this << endl << "END: " << info_end << "  " << "POS: " << this->position << endl;
+        return false;
+    }
+
+    if (has_seq) {
+        // Force the SEQ to upper case, if already present
+        this->info["SEQ"].resize(1);
+        this->info["SEQ"][0] = toUpper(this->info["SEQ"][0]);
+    }
+
+    // Set the other necessary SV Tags (SVTYPE, SEQ (if insertion))
+    // Also check for agreement in the position tags
+    if (svtype == "INS"){
+        if (info_end != this->position){
+            cerr << "Warning: insertion END and POS do not agree (complex insertions not canonicalizeable) [canonicalize] " <<
+            *this << endl << "END: " << info_end << "  " << "POS: " << this->position << endl;
+
+            if (info_end == this->position + info_len) {
+                // We can probably guess what they meant here.
+                cerr << "Warning: VCF writer incorrecty produced END = POS + SVLEN for an insertion. Fixing END to POS." << endl;
+                info_end = this->position;
+                this->info["END"][0] = to_string(info_end);
+            } else {
+                return false;
+            }
+        }
+
+        if (info_len != info_span){
+            cerr << "Warning: insertion SVLEN and SPAN do not agree (complex insertions not canonicalizeable) [canonicalize] " <<
+            *this << endl << "SVLEN: " << info_len << "  " << "SPAN: " << info_span << endl;
+            return false;
+        }
+
+        if (has_seq && allATGCN(this->info.at("SEQ")[0]) && this->info.at("SEQ")[0].size() != info_len){
+            cerr << "Warning: insertion SVLEN and SEQ do not agree (complex insertions not canonicalizeable) [canonicalize] " <<
+            *this << endl << "SVLEN: " << info_len << "  " << "SEQ length: " << this->info.at("SEQ")[0].size() << endl;
+            return false;
+        }
+
+        // Set REF
+        string ref_base = toUpper(fasta_reference.getSubSequence(this->sequenceName, this->zeroBasedPosition(), 1));
+        if (place_seq){
+            this->ref.assign(ref_base);
+        }
+
+        if (has_seq &&
+                 alt[0] != this->info.at("SEQ")[0] &&
+                 allATGCN(this->info.at("SEQ")[0])){
+            // Try to remove prepended ref sequence, assuming it's left-aligned
+            string s = this->alt[0];
+            s = toUpper(s.substr(this->ref.length()));
+            if (s != this->info.at("SEQ")[0] && !place_seq){
+                cerr << "Warning: INS sequence in alt field does not match SEQ tag" << endl <<
+                this->alt[0] << " " << this->info.at("SEQ")[0] << endl;
+                return false;
+            }
+            if (place_seq){
+                this->alt[0].assign( ref_base + this->info.at("SEQ")[0] );
+            }
+
+        }
+        else if (alt_i_atgcn[0] && !has_seq){
+            string s = this->alt[0];
+            s = toUpper(s.substr(this->ref.length()));
+            this->info["SEQ"].resize(1);
+            this->info.at("SEQ")[0].assign(s);
+
+            if (s.size() != info_len){
+                cerr << "Warning: insertion SVLEN and added bases do not agree (complex insertions not canonicalizeable) [canonicalize] " <<
+                *this << endl << "SVLEN: " << info_len << "  " << "added bases: " << s.size() << endl;
+                return false;
+            }
+
+        }
+        else if (alt[0][0] == '<' && do_external_insertions){
+
+            string ins_seq;
+            string seq_id = alt[0].substr(1, alt[0].size() - 2);
+
+            if (insertion_fasta->index->find(seq_id) != insertion_fasta->index->end()){
+                ins_seq = toUpper(insertion_fasta->getSequence(seq_id));
+                if (allATGCN(ins_seq)){
+                    this->info["SEQ"].resize(1);
+                    this->info["SEQ"][0].assign(ins_seq);
+                    if (place_seq){
+                        this->alt[0].assign(ref_base + ins_seq);
+                    }
+                }
+                else {
+                    cerr << "Warning: Loaded invalid alt sequence for: " << *this << endl;
+                    return false;
+                }
+
+                if (ins_seq.size() != info_len){
+                    cerr << "Warning: insertion SVLEN and FASTA do not agree (complex insertions not canonicalizeable) [canonicalize] " <<
+                    *this << endl << "SVLEN: " << info_len << "  " << "FASTA bases: " << ins_seq.size() << endl;
+                    return false;
+                }
+            }
+            else{
+                cerr << "Warning: could not locate alt sequence for: " << *this << endl;
+                return false;
+            }
+
+        }
+        else{
+            cerr << "Warning: could not set SEQ [canonicalize]. " << *this << endl;
+            return false;
+        }
+    }
+    else if (svtype == "DEL"){
+        // Note that info_len has been abs'd and is always positive
+        if (this->position + info_len != info_end){
+            cerr << "Warning: deletion END and SVLEN do not agree [canonicalize] " << *this << endl <<
+            "END: " << info_end << "  " << "SVLEN: " << info_len << endl;
+            return false;
+        }
+
+        if (this->position + info_span != info_end){
+            cerr << "Warning: deletion END and SPAN do not agree [canonicalize] " << *this << endl <<
+            "END: " << info_end << "  " << "SPAN: " << info_span << endl;
+            return false;
+        }
+    
+        if (info_end > fasta_reference.sequenceLength(this->sequenceName)) {
+            cerr << "Warning: deletion END is past end of sequence [canonicalize] " << *this << endl <<
+            "END: " << info_end << "  " << "length: " << fasta_reference.sequenceLength(this->sequenceName) << endl;
+            return false;
+        }
+
+        // Set REF
+        if (place_seq){
+            string del_seq = toUpper(fasta_reference.getSubSequence(this->sequenceName, this->zeroBasedPosition(), info_len + 1));
+            string ref_base = toUpper(fasta_reference.getSubSequence(this->sequenceName, this->zeroBasedPosition(), 1));
+            this->ref.assign( del_seq );
+            this->alt[0].assign( ref_base );
+        }
+    }
+    else if (svtype == "INV"){
+        if (this->position + info_span != info_end){
+            cerr << "Warning: inversion END and SPAN do not agree [canonicalize] " << *this << endl <<
+            "END: " << info_end << "  " << "SPAN: " << info_span << endl;
+            return false;
+        }
+
+        if (info_len != 0){
+            cerr << "Warning: inversion SVLEN specifies nonzero length change (complex inversions not canonicalizeable) [canonicalize] " <<
+            *this << endl << "SVLEN: " << info_len << endl;
+
+            if (info_end == this->position + info_len) {
+                // We can probably guess what they meant here.
+                cerr << "Warning: VCF writer incorrecty produced END = POS + SVLEN for an inversion. Fixing SVLEN to 0." << endl;
+                info_len = 0;
+                this->info["SVLEN"][0] = to_string(info_len);
+            } else {
+                return false;
+            }
+        }
+        
+        if (info_end > fasta_reference.sequenceLength(this->sequenceName)) {
+            cerr << "Warning: inversion END is past end of sequence [canonicalize] " << *this << endl <<
+            "END: " << info_end << "  " << "length: " << fasta_reference.sequenceLength(this->sequenceName) << endl;
+            return false;
+        }
+    
+        if (place_seq){
+            string ref_seq = toUpper(fasta_reference.getSubSequence(this->sequenceName, this->zeroBasedPosition(), info_span + 1));
+            // Note that inversions still need an anchoring left base at POS
+            string inv_seq = ref_seq.substr(0, 1) + reverse_complement(ref_seq.substr(1));
+            this->ref.assign(ref_seq);
+            this->alt[0].assign(inv_seq);
+        }
+
+    }
+    else{
+        cerr << "Warning: invalid SV type [canonicalize]:" << *this << endl;
+        return false;
+    }
+
+
+    this->updateAlleleIndexes();
+
+    // Check for harmony between ref / alt / tags
+    if (this->position > stol(this->info.at("END").at(0))){
+        cerr << "Warning: position > END. Possible reference genome mismatch." << endl;
+        return false;
+    }
+
+    if (svtype == "INS"){
+        assert(!this->info.at("SEQ")[0].empty());
+    }
+
+    this->canonical = true;
+    return true;
+}
 
 void Variant::setVariantCallFile(VariantCallFile& v) {
     sampleNames = v.sampleNames;
@@ -605,8 +1059,8 @@ VariantFieldType Variant::infoType(const string& key) {
 
     void Variant::addFormatField(const string& key) {
         bool hasTag = false;
-        for (vector<string>::iterator t = format.begin(); t != format.end(); ++t) {
-            if (*t == key) {
+        for (const auto& t : format) {
+            if (t == key) {
                 hasTag = true;
                 break;
             }
@@ -616,16 +1070,16 @@ VariantFieldType Variant::infoType(const string& key) {
         }
     }
 
-    void Variant::printAlt(ostream& out) {
-        for (vector<string>::iterator i = alt.begin(); i != alt.end(); ++i) {
+    void Variant::printAlt(ostream& out) const {
+        for (vector<string>::const_iterator i = alt.begin(); i != alt.end(); ++i) {
             out << *i;
             // add a comma for all but the last alternate allele
             if (i != (alt.end() - 1)) out << ",";
         }
     }
 
-    void Variant::printAlleles(ostream& out) {
-        for (vector<string>::iterator i = alleles.begin(); i != alleles.end(); ++i) {
+    void Variant::printAlleles(ostream& out) const {
+        for (vector<string>::const_iterator i = alleles.begin(); i != alleles.end(); ++i) {
             out << *i;
             // add a comma for all but the last alternate allele
             if (i != (alleles.end() - 1)) out << ",";
@@ -664,7 +1118,7 @@ VariantFieldType Variant::infoType(const string& key) {
             vector<string> ordered_keys, missing_keys;  // the output list
             // first lookup the keys that appear both in infoOrdered keys
             // and the info field:
-            for (auto name: var.infoOrderedKeys)
+            for (const auto& name: var.infoOrderedKeys)
             {
                 lookup_keys[name] = true;
                 if (!var.info[name].empty()) ordered_keys.push_back(name);
@@ -682,12 +1136,12 @@ VariantFieldType Variant::infoType(const string& key) {
             ordered_keys.insert(ordered_keys.end(), missing_keys.begin(), missing_keys.end());
             // output the ordered info fields
             string s = "";
-            for (auto name: ordered_keys) {
-                auto value = var.info[name];
+            for (const auto& name: ordered_keys) {
+                const auto& value = var.info[name];
                 if (!value.empty()) {
                     s += name + "=" + join(value, ",") + ";" ;
                 } else {
-                    auto infoflag = var.infoFlags[name];
+                    const auto infoflag = var.infoFlags[name];
                     if (infoflag == true)
                         s += name + ";";
                 }
@@ -699,24 +1153,24 @@ VariantFieldType Variant::infoType(const string& key) {
         if (!var.format.empty()) {
             out << "\t";
             string format = "";
-            for (auto f: var.format) {
+            for (const auto& f: var.format) {
                 format += f + ":";
             }
             auto len = format.length();
             if (len)
                 out << format.substr(0, len-1); // chop s1.substr(0, i-1);
-            for (auto s: var.outputSampleNames) {
+            for (const auto& s: var.outputSampleNames) {
                 out << "\t";
-                map<string, map<string, vector<string> > >::iterator sampleItr = var.samples.find(s);
+                const auto sampleItr = var.samples.find(s);
                 if (sampleItr == var.samples.end()) {
                     out << ".";
                 } else {
-                    map<string, vector<string> >& sample = sampleItr->second;
-                    if (sample.size() == 0) {
+                    const map<string, vector<string> >& sample = sampleItr->second;
+                    if (sample.empty()) {
                         out << ".";
                     } else {
                         for (vector<string>::iterator f = var.format.begin(); f != var.format.end(); ++f) {
-                            map<string, vector<string> >::iterator g = sample.find(*f);
+                            const auto g = sample.find(*f);
                             out << ((f == var.format.begin()) ? "" : ":");
                             if (g != sample.end() && !g->second.empty()) {
                                 out << join(g->second, ",");
@@ -731,7 +1185,7 @@ VariantFieldType Variant::infoType(const string& key) {
         return out;
     }
 
-    void Variant::setOutputSampleNames(vector<string>& samplesToOutput) {
+    void Variant::setOutputSampleNames(const vector<string>& samplesToOutput) {
         outputSampleNames = samplesToOutput;
     }
 
@@ -782,7 +1236,7 @@ VariantFieldType Variant::infoType(const string& key) {
         }
     }
 
-    RuleToken::RuleToken(string tokenstr, map<string, VariantFieldType>& variables) {
+    RuleToken::RuleToken(const string& tokenstr, map<string, VariantFieldType>& variables) {
         isVariable = false;
         if (tokenstr == "!") {
             type = RuleToken::NOT_OPERATOR;
@@ -1217,10 +1671,10 @@ void VariantCallFile::addHeaderLine(string line) {
 vector<string>& unique(vector<string>& strings) {
     set<string> uniq;
     vector<string> res;
-    for (vector<string>::const_iterator s = strings.begin(); s != strings.end(); ++s) {
-        if (uniq.find(*s) == uniq.end()) {
-            res.push_back(*s);
-            uniq.insert(*s);
+    for (const auto& s : strings) {
+        if (uniq.find(s) == uniq.end()) {
+            res.push_back(s);
+            uniq.insert(s);
         }
     }
     strings = res;
@@ -1230,8 +1684,7 @@ vector<string>& unique(vector<string>& strings) {
 vector<string> VariantCallFile::infoIds(void) {
     vector<string> tags;
     vector<string> headerLines = split(header, '\n');
-    for (vector<string>::iterator s = headerLines.begin(); s != headerLines.end(); ++s) {
-        string& line = *s;
+    for (const auto& line : headerLines) {
         if (line.find("##INFO") == 0) {
             size_t pos = line.find("ID=");
             if (pos != string::npos) {
@@ -1249,8 +1702,7 @@ vector<string> VariantCallFile::infoIds(void) {
 vector<string> VariantCallFile::formatIds(void) {
     vector<string> tags;
     vector<string> headerLines = split(header, '\n');
-    for (vector<string>::iterator s = headerLines.begin(); s != headerLines.end(); ++s) {
-        string& line = *s;
+    for (const auto& line : headerLines) {
         if (line.find("##FORMAT") == 0) {
             size_t pos = line.find("ID=");
             if (pos != string::npos) {
@@ -1269,8 +1721,7 @@ void VariantCallFile::removeInfoHeaderLine(string const & tag) {
     vector<string> headerLines = split(header, '\n');
     vector<string> newHeader;
     string id = "ID=" + tag + ",";
-    for (vector<string>::iterator s = headerLines.begin(); s != headerLines.end(); ++s) {
-        string& line = *s;
+    for (const auto& line : headerLines) {
         if (line.find("##INFO") == 0) {
             if (line.find(id) == string::npos) {
                 newHeader.push_back(line);
@@ -1286,8 +1737,7 @@ void VariantCallFile::removeGenoHeaderLine(string const & tag) {
     vector<string> headerLines = split(header, '\n');
     vector<string> newHeader;
     string id = "ID=" + tag + ",";
-    for (vector<string>::iterator s = headerLines.begin(); s != headerLines.end(); ++s) {
-        string& headerLine = *s;
+    for (const auto& headerLine : headerLines) {
         if (headerLine.find("##FORMAT") == 0) {
             if (headerLine.find(id) == string::npos) {
                 newHeader.push_back(headerLine);
@@ -1371,8 +1821,7 @@ bool VariantCallFile::parseHeader(string& hs) {
     header = hs; // stores the header in the object instance
 
     vector<string> headerLines = split(header, "\n");
-    for (vector<string>::iterator h = headerLines.begin(); h != headerLines.end(); ++h) {
-        string headerLine = *h;
+    for (const auto& headerLine : headerLines) {
         if (headerLine.substr(0,2) == "##") {
             // meta-information headerLines
             // TODO parse into map from info/format key to type
@@ -1393,7 +1842,7 @@ bool VariantCallFile::parseHeader(string& hs) {
                     vector<string> fields = split(entryData, "=,");
                     if (fields.size() < 8) {
                         cerr << "header line does not have all of the required fields: ID, Number, Type, and Description" << endl
-                             << headerLine << endl;;
+                             << headerLine << endl;
                         exit(1);
                     }
                     // get the required fields from the header line
@@ -1495,7 +1944,7 @@ bool VariantCallFile::getNextVariant(Variant& var) {
         }
 }
 
-bool VariantCallFile::setRegion(string seq, long int start, long int end) {
+bool VariantCallFile::setRegion(const string& seq, long int start, long int end) {
     stringstream regionstr;
     if (end) {
         regionstr << seq << ":" << start << "-" << end;
@@ -1505,7 +1954,7 @@ bool VariantCallFile::setRegion(string seq, long int start, long int end) {
     return setRegion(regionstr.str());
 }
 
-bool VariantCallFile::setRegion(string region) {
+bool VariantCallFile::setRegion(const string& region) {
     if (!usingTabix) {
         cerr << "cannot setRegion on a non-tabix indexed file" << endl;
         exit(1);
@@ -1545,17 +1994,17 @@ map<string, int> decomposeGenotype(string& genotype) {
 
 map<int, int> decomposeGenotype(const string& genotype) {
     string splitter = "/";
-    if (genotype.find("|") != string::npos) {
+    if (genotype.find('|') != string::npos) {
         splitter = "|";
     }
     vector<string> haps = split(genotype, splitter);
     map<int, int> decomposed;
-    for (vector<string>::iterator h = haps.begin(); h != haps.end(); ++h) {
+    for (const auto& h : haps) {
         int alt;
-        if (*h == ".") {
+        if (h == ".") {
             ++decomposed[NULL_ALLELE];
         } else {
-            convert(*h, alt);
+            convert(h, alt);
             ++decomposed[alt];
         }
     }
@@ -1564,7 +2013,7 @@ map<int, int> decomposeGenotype(const string& genotype) {
 
 vector<int> decomposePhasedGenotype(const string& genotype) {
     string splitter = "/";
-    if (genotype.find("|") != string::npos) {
+    if (genotype.find('|') != string::npos) {
         splitter = "|";
     }
     vector<string> haps = split(genotype, splitter);
@@ -1573,12 +2022,12 @@ vector<int> decomposePhasedGenotype(const string& genotype) {
         exit(1);
     }
     vector<int> decomposed;
-    for (vector<string>::iterator h = haps.begin(); h != haps.end(); ++h) {
+    for (const auto& h : haps) {
         int alt;
-        if (*h == ".") {
+        if (h == ".") {
             decomposed.push_back(NULL_ALLELE);
         } else {
-            convert(*h, alt);
+            convert(h, alt);
             decomposed.push_back(alt);
         }
     }
@@ -1587,25 +2036,27 @@ vector<int> decomposePhasedGenotype(const string& genotype) {
 
 string genotypeToString(const map<int, int>& genotype) {
     vector<int> s;
-    for (map<int, int>::const_iterator g = genotype.begin(); g != genotype.end(); ++g) {
-        int a = g->first;
-        int c = g->second;
+    for (const auto& g : genotype) {
+        int a = g.first;
+        int c = g.second;
         for (int i = 0; i < c; ++i) s.push_back(a);
     }
     sort(s.begin(), s.end());
     vector<string> r;
-    for (vector<int>::iterator i = s.begin(); i != s.end(); ++i) {
-        if (*i == NULL_ALLELE) r.push_back(".");
-        else r.push_back(convert(*i));
+    r.reserve(s.size());
+
+    for (const auto& i : s) {
+        if (i == NULL_ALLELE) r.push_back(".");
+        else r.push_back(convert(i));
     }
     return join(r, "/"); // TODO adjust for phased/unphased
 }
 
 string phasedGenotypeToString(const vector<int>& genotype) {
     vector<string> r;
-    for (vector<int>::const_iterator i = genotype.begin(); i != genotype.end(); ++i) {
-        if (*i == NULL_ALLELE) r.push_back(".");
-        else r.push_back(convert(*i));
+    for (const auto& i : genotype) {
+        if (i == NULL_ALLELE) r.push_back(".");
+        else r.push_back(convert(i));
     }
     return join(r, "|");
 }
@@ -1619,8 +2070,8 @@ bool isHom(const map<int, int>& genotype) {
 }
 
 bool hasNonRef(const map<int, int>& genotype) {
-    for (map<int, int>::const_iterator g = genotype.begin(); g != genotype.end(); ++g) {
-        if (g->first != 0) {
+    for (const auto& g : genotype) {
+        if (g.first != 0) {
             return true;
         }
     }
@@ -1641,8 +2092,8 @@ bool isNull(const map<int, int>& genotype) {
 
 int ploidy(const map<int, int>& genotype) {
     int i = 0;
-    for (map<int, int>::const_iterator g = genotype.begin(); g != genotype.end(); ++g) {
-        i += g->second;
+    for (const auto& g : genotype) {
+        i += g.second;
     }
     return i;
 }
@@ -1652,8 +2103,7 @@ int ploidy(const map<int, int>& genotype) {
 
 map<string, vector<VariantAllele> > Variant::flatAlternates(void) {
     map<string, vector<VariantAllele> > variantAlleles;
-    for (vector<string>::iterator a = alt.begin(); a != alt.end(); ++a) {
-        string& alternate = *a;
+    for (const auto& alternate: alt) {
         vector<VariantAllele>& variants = variantAlleles[alternate];
         variants.push_back(VariantAllele(ref, alternate, position));
     }
@@ -1670,16 +2120,17 @@ map<pair<int, int>, int> Variant::getGenotypeIndexesDiploid(void) {
     map<pair<int, int>, int> genotypeIndexes;
     //map<int, map<Genotype*, int> > vcfGenotypeOrder;
     vector<int> indexes;
+    indexes.reserve(alleles.size());
     for (int i = 0; i < alleles.size(); ++i) {
         indexes.push_back(i);
     }
     int ploidy = 2; // ONLY diploid
     vector<vector<int> > genotypes = multichoose(ploidy, indexes);
-    for (vector<vector<int> >::iterator g = genotypes.begin(); g != genotypes.end(); ++g) {
-        sort(g->begin(), g->end());  // enforce e.g. 0/1, 0/2, 1/2 ordering over reverse
+    for (auto& g : genotypes) {
+        sort(g.begin(), g.end());  // enforce e.g. 0/1, 0/2, 1/2 ordering over reverse
         // XXX this does not handle non-diploid!!!!
-        int j = g->front();
-        int k = g->back();
+        int j = g.front();
+        int k = g.back();
         genotypeIndexes[make_pair(j, k)] = (k * (k + 1) / 2) + j;
     }
     return genotypeIndexes;
@@ -1700,11 +2151,10 @@ void Variant::updateAlleleIndexes(void) {
 
     int altIndex = getAltAlleleIndex(altAllele);  // this is the alt-relative index, 0-based
 
-    for (map<string, int>::iterator c = vcf->infoCounts.begin();
-	 c != vcf->infoCounts.end(); ++c) {
-      int count = c->second;
+    for (const auto& c: vcf->infoCounts) {
+      int count = c.second;
       if (count == ALLELE_NUMBER) {
-	string key = c->first;
+	const string& key = c.first;
 	map<string, vector<string> >::iterator v = info.find(key);
 	if (v != info.end()) {
 	  vector<string>& vals = v->second;
@@ -1721,28 +2171,25 @@ void Variant::updateAlleleIndexes(void) {
       }
     }
 
-    for (map<string, int>::iterator c = vcf->formatCounts.begin();
-	 c != vcf->formatCounts.end(); ++c) {
-      int count = c->second;
+    for (const auto& c : vcf->formatCounts) {
+      int count = c.second;
       if (count == ALLELE_NUMBER) {
-            string key = c->first;
-            for (map<string, map<string, vector<string> > >::iterator
-		   s = samples.begin(); s != samples.end(); ++s) {
-	      map<string, vector<string> >& sample = s->second;
-	      map<string, vector<string> >::iterator v = sample.find(key);
-	      if (v != sample.end()) {
-		vector<string>& vals = v->second;
-		vector<string> tokeep;
-		int i = 0;
-		for (vector<string>::iterator a = vals.begin();
-		     a != vals.end(); ++a, ++i) {
-		  if (i != altIndex) {
-		    tokeep.push_back(*a);
-		  }
-		}
-		vals = tokeep;
-	      }
-            }
+      	const string& key = c.first;
+      	for (auto& [_, sample] : samples) {
+      		map<string, vector<string> >::iterator v = sample.find(key);
+      		if (v != sample.end()) {
+      			vector<string>& vals = v->second;
+      			vector<string> tokeep;
+      			int i = 0;
+      			for (vector<string>::iterator a = vals.begin();
+                    a != vals.end(); ++a, ++i) {
+      				if (i != altIndex) {
+      					tokeep.push_back(*a);
+      				}
+                    }
+      			vals = tokeep;
+      		}
+      	}
       }
     }
 
@@ -1773,7 +2220,7 @@ void Variant::updateAlleleIndexes(void) {
         if (sample.find("GT") != sample.end()) {
             string& gt = sample["GT"].front();
             string splitter = "/";
-            if (gt.find("|") != string::npos) {
+            if (gt.find('|') != string::npos) {
                 splitter = "|";
             }
 
@@ -1809,17 +2256,17 @@ void Variant::updateAlleleIndexes(void) {
     vector<int> toRemove;
     toRemove.push_back(altSpecIndex);
     map<int, map<int, int> > glMappingByPloidy;
-    for (set<int>::iterator p = ploidies.begin(); p != ploidies.end(); ++p) {
-        glMappingByPloidy[*p] = glReorder(*p, alt.size() + 1, alleleIndexMapping, toRemove);
+    for (const auto p : ploidies) {
+        glMappingByPloidy[p] = glReorder(p, alt.size() + 1, alleleIndexMapping, toRemove);
     }
 
-    for (map<string, map<string, vector<string> > >::iterator s = samples.begin(); s != samples.end(); ++s) {
-        map<string, vector<string> >& sample = s->second;
-        map<string, vector<string> >::iterator glsit = sample.find("GL");
+    for (auto& s : samples) {
+        auto& sample = s.second;
+        auto glsit = sample.find("GL");
         if (glsit != sample.end()) {
             vector<string>& gls = glsit->second; // should be split already
             map<int, string> newgls;
-            map<int, int>& newOrder = glMappingByPloidy[samplePloidy[s->first]];
+            map<int, int>& newOrder = glMappingByPloidy[samplePloidy[s.first]];
             int i = 0;
             for (vector<string>::iterator g = gls.begin(); g != gls.end(); ++g, ++i) {
                 int j = newOrder[i];
@@ -1829,8 +2276,8 @@ void Variant::updateAlleleIndexes(void) {
             }
             // update the gls
             gls.clear();
-            for (map<int, string>::iterator g = newgls.begin(); g != newgls.end(); ++g) {
-                gls.push_back(g->second);
+            for (const auto& g : newgls) {
+                gls.push_back(g.second);
             }
         }
     }
@@ -1854,23 +2301,23 @@ string unionInfoHeaderLines(string& s1, string& s2) {
     vector<string> result;
     set<string> l2;
     string lastHeaderLine; // this one needs to be at the end
-    for (vector<string>::iterator s = lines2.begin(); s != lines2.end(); ++s) {
-        if (s->substr(0,6) == "##INFO") {
-            l2.insert(*s);
+    for (const auto& s : lines2) {
+        if (s.substr(0,6) == "##INFO") {
+            l2.insert(s);
         }
     }
-    for (vector<string>::iterator s = lines1.begin(); s != lines1.end(); ++s) {
-        if (l2.count(*s)) {
-            l2.erase(*s);
+    for (const auto& s : lines1) {
+        if (l2.count(s)) {
+            l2.erase(s);
         }
-        if (s->substr(0,6) == "#CHROM") {
-            lastHeaderLine = *s;
+        if (s.substr(0,6) == "#CHROM") {
+            lastHeaderLine = s;
         } else {
-            result.push_back(*s);
+            result.push_back(s);
         }
     }
-    for (set<string>::iterator s = l2.begin(); s != l2.end(); ++s) {
-        result.push_back(*s);
+    for (const auto& s : l2) {
+        result.push_back(s);
     }
     if (lastHeaderLine.empty()) {
         cerr << "could not find CHROM POS ... header line" << endl;
@@ -1893,10 +2340,10 @@ list<list<int> > _glorder(int ploidy, int alts) {
         list<list<int> > results;
         for (int n = 0; n < alts; ++n) {
             list<list<int> > x = _glorder(ploidy - 1, alts);
-            for (list<list<int> >::iterator v = x.begin(); v != x.end(); ++v) {
-                if (v->front() <= n) {
-                    v->push_front(n);
-                    results.push_back(*v);
+            for (auto& v : x) {
+                if (v.front() <= n) {
+                    v.push_front(n);
+                    results.push_back(v);
                 }
             }
         }
@@ -1908,8 +2355,8 @@ list<list<int> > _glorder(int ploidy, int alts) {
 // list of integers (as written in the GT field)
 list<list<int> > glorder(int ploidy, int alts) {
     list<list<int> > results = _glorder(ploidy, alts);
-    for (list<list<int> >::iterator v = results.begin(); v != results.end(); ++v) {
-        v->reverse();
+    for (auto& v : results) {
+        v.reverse();
     }
     return results;
 }
@@ -1920,8 +2367,8 @@ list<int> glsWithAlt(int alt, int ploidy, int numalts) {
     list<list<int> > orderedGenotypes = glorder(ploidy, numalts);
     int i = 0;
     for (list<list<int> >::iterator v = orderedGenotypes.begin(); v != orderedGenotypes.end(); ++v, ++i) {
-        for (list<int>::iterator q = v->begin(); q != v->end(); ++q) {
-            if (*q == alt) {
+        for (const auto& q : *v) {
+            if (q == alt) {
                 gls.push_back(i);
                 break;
             }
@@ -1936,9 +2383,9 @@ list<int> glsWithAlt(int alt, int ploidy, int numalts) {
 map<int, int> glReorder(int ploidy, int numalts, map<int, int>& alleleIndexMapping, vector<int>& altsToRemove) {
     map<int, int> mapping;
     list<list<int> > orderedGenotypes = glorder(ploidy, numalts);
-    for (list<list<int> >::iterator v = orderedGenotypes.begin(); v != orderedGenotypes.end(); ++v) {
-        for (list<int>::iterator n = v->begin(); n != v->end(); ++n) {
-            *n = alleleIndexMapping[*n];
+    for (auto& v : orderedGenotypes) {
+        for (auto& n : v) {
+            n = alleleIndexMapping[n];
         }
     }
     list<list<int> > newOrderedGenotypes = glorder(ploidy, numalts - altsToRemove.size());
@@ -1979,7 +2426,7 @@ bool Variant::isPhased(void) {
         map<string, vector<string> >::iterator g = sample.find("GT");
         if (g != sample.end()) {
             string gt = g->second.front();
-            if (gt.size() > 1 && gt.find("|") == string::npos) {
+            if (gt.size() > 1 && gt.find('|') == string::npos) {
                 return false;
             }
         }
@@ -2158,17 +2605,17 @@ vector<Variant*> Variant::matchingHaplotypes() {
         // initialize the header_lines with the above vector.
         // Set the key as the ##_type_ and the value as an empty string
         // Empty strings are ignored when outputting as string (getHeaderString)
-        for (vector<string>::const_iterator header_lines_iter = this->header_line_names_ordered.begin(); header_lines_iter != this->header_line_names_ordered.end(); ++header_lines_iter)
+        for (const auto& header_lines_iter : this->header_line_names_ordered)
         {
-            this->header_lines[(*header_lines_iter)] = "";
+            this->header_lines[header_lines_iter] = "";
         }
 
         // initialize the header_lines with the above vector.
         // Set the key as the ##_type_ and the value as an empty vector<string>
         // Empty vectors are ignored when outputting as string (getHeaderString)
-        for (vector<string>::const_iterator header_lists_iter = this->header_list_names_ordered.begin(); header_lists_iter != this->header_list_names_ordered.end(); ++header_lists_iter)
+        for (const auto& header_lists_iter : header_list_names_ordered)
         {
-            this->header_lists[(*header_lists_iter)] = vector<string>(0);
+            this->header_lists[header_lists_iter] = vector<string>(0);
         }
 
     }
@@ -2176,7 +2623,7 @@ vector<Variant*> Variant::matchingHaplotypes() {
     void VCFHeader::addMetaInformationLine(const string& meta_line)
     {
         // get the meta_line unique key (first chars before the =)
-        unsigned int meta_line_index = meta_line.find("=", 0);
+        unsigned int meta_line_index = meta_line.find('=', 0);
         string meta_line_prefix = meta_line.substr(0, meta_line_index);
 
         // check if the meta_line_prefix is in the header_lines, if so add it to the appropirate list
@@ -2197,27 +2644,27 @@ vector<Variant*> Variant::matchingHaplotypes() {
         string header_string;
 
         // start by adding the header_lines
-        for (vector<string>::const_iterator header_lines_iter = this->header_line_names_ordered.begin(); header_lines_iter != this->header_line_names_ordered.end(); ++header_lines_iter)
+        for (const auto& header_lines_iter : header_line_names_ordered)
         {
-            if (this->header_lines[(*header_lines_iter)] != "")
+            if (this->header_lines[header_lines_iter] != "")
             {
-                header_string += this->header_lines[(*header_lines_iter)] + "\n";
+                header_string += this->header_lines[header_lines_iter] + "\n";
             }
         }
 
         // next add header_lists
-        for (vector<string>::const_iterator header_lists_iter = this->header_list_names_ordered.begin(); header_lists_iter != this->header_list_names_ordered.end(); ++header_lists_iter)
+        for (const auto& header_lists_iter : header_list_names_ordered)
         {
-            vector<string> tmp_header_lists = this->header_lists[(*header_lists_iter)];
-            for (vector<string>::const_iterator header_list = tmp_header_lists.begin(); header_list != tmp_header_lists.end(); ++header_list)
+            vector<string> tmp_header_lists = this->header_lists[header_lists_iter];
+            for (const auto& header_list : tmp_header_lists)
             {
-                header_string += (*header_list) + "\n";
+                header_string += header_list + "\n";
             }
         }
 
         // last add header columns
-        vector<string>::const_iterator last_element = this->header_columns.end() - 1;
-        for (vector<string>::const_iterator header_column_iter = this->header_columns.begin(); header_column_iter != this->header_columns.end(); ++header_column_iter)
+        const auto last_element = this->header_columns.end() - 1;
+        for (auto header_column_iter = this->header_columns.begin(); header_column_iter != this->header_columns.end(); ++header_column_iter)
         {
             string delimiter = (header_column_iter == last_element) ? "\n" : "\t";
             header_string += (*header_column_iter) + delimiter;
@@ -2229,17 +2676,17 @@ vector<Variant*> Variant::matchingHaplotypes() {
     {
         // extract the id from meta_line
         size_t meta_line_id_start_idx = meta_line.find("ID=", 0); // used for the start of the substring index
-        size_t meta_line_id_end_idx = meta_line.find(",", meta_line_id_start_idx); // used for end of the substring index
+        size_t meta_line_id_end_idx = meta_line.find(',', meta_line_id_start_idx); // used for end of the substring index
         string meta_line_id = (meta_line_id_start_idx < meta_line_id_end_idx) ? meta_line.substr(meta_line_id_start_idx, meta_line_id_end_idx - meta_line_id_start_idx) : "";
 
-        for (vector<string>::const_iterator iter = meta_lines.begin(); iter != meta_lines.end(); ++iter)
+        for (const auto& meta_line : meta_lines)
         {
-            // extract the id from iter's meta_line string
-            size_t iter_meta_line_id_start_idx = (*iter).find("ID=", 0);
-            size_t iter_meta_line_id_end_idx = (*iter).find(",", iter_meta_line_id_start_idx);
-            string iter_meta_line_id = (iter_meta_line_id_start_idx < iter_meta_line_id_end_idx) ? (*iter).substr(iter_meta_line_id_start_idx, iter_meta_line_id_end_idx - iter_meta_line_id_start_idx) : "";
-            // compare the meta_line_id with the iter_meta_line_id
-            if (strcasecmp(meta_line_id.c_str(), iter_meta_line_id.c_str()) == 0)
+            // extract the id from meta_line string
+            size_t meta_line_id_start_idx = meta_line.find("ID=", 0);
+            size_t meta_line_id_end_idx = meta_line.find(",", meta_line_id_start_idx);
+            string meta_line_id = (meta_line_id_start_idx < meta_line_id_end_idx) ? meta_line.substr(meta_line_id_start_idx, meta_line_id_end_idx - meta_line_id_start_idx) : "";
+            // compare the meta_line_id with the meta_line_id
+            if (strcasecmp(meta_line_id.c_str(), meta_line_id.c_str()) == 0)
             {
                 return true;
             }
@@ -2268,8 +2715,8 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
                                                               float gapOpenPenalty,
                                                               float gapExtendPenalty,
                                                               float repeatGapExtendPenalty,
-                                                              string flankingRefLeft,
-                                                              string flankingRefRight) {
+                                                              const string& flankingRefLeft,
+                                                              const string& flankingRefRight) {
 
     map<string, vector<VariantAllele> > variantAlleles;
 
@@ -2290,8 +2737,7 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
     // padding is used to ensure a stable alignment of the alternates to the reference
     // without having to go back and look at the full reference sequence
     int paddingLen = max(10, (int) (ref.size()));  // dynamically determine optimum padding length
-    for (vector<string>::iterator a = alt.begin(); a != alt.end(); ++a) {
-        string& alternate = *a;
+    for (const auto& alternate : alt) {
         paddingLen = max(paddingLen, (int) (alternate.size()));
     }
     char padChar = 'Z';
@@ -2316,9 +2762,8 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
 
     string cigar;
 
-    for (vector<string>::iterator a = alt.begin(); a != alt.end(); ++a) {
+    for (const auto& alternate : alt) {
 
-      string& alternate = *a;
       vector<VariantAllele>& variants = variantAlleles[alternate];
       string alternateQuery_M;
       if (flankingRefLeft.empty() && flankingRefRight.empty()) {
@@ -2372,11 +2817,10 @@ map<string, vector<VariantAllele> > Variant::parsedAlternates(bool includePrevio
       int altpos = 0;
       int refpos = 0;
 
-      for (vector<pair<int, string> >::iterator e = cigarData.begin();
-	   e != cigarData.end(); ++e) {
+      for (const auto& e : cigarData) {
 
-	int len = e->first;
-	string type = e->second;
+	int len = e.first;
+	const string& type = e.second;
 
 	switch (type.at(0)) {
 	case 'I':

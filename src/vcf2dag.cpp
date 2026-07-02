@@ -7,14 +7,13 @@
     This software is published under the MIT License. See the LICENSE file.
 */
 
+#include "convert.h"
+
 #include "Variant.h"
 #include "BedReader.h"
-#include "IntervalTree.h"
+
 #include <getopt.h>
-#include "Fasta.h"
-#include <algorithm>
-#include <list>
-#include <set>
+#include <Fasta.h>
 
 using namespace std;
 using namespace vcflib;
@@ -153,7 +152,8 @@ int main(int argc, char** argv) {
 
         vector<string>& idxs = var.info[idname+".alt"];
         idxs.clear();
-        for (vector<string>::iterator a = var.alt.begin(); a != var.alt.end(); ++a) {
+        // TODO: fix for loop
+        for (const auto& _ : var.alt) {
             idxs.push_back(convert(uid++));
         }
         cout << var << endl;

@@ -7,10 +7,10 @@
     This software is published under the MIT License. See the LICENSE file.
 */
 
+#include "convert.h"
+
 #include "Variant.h"
-#include "split.h"
 #include <string>
-#include <sstream>
 #include <iostream>
 #include <getopt.h>
 
@@ -18,11 +18,9 @@ using namespace std;
 using namespace vcflib;
 
 bool samplesDiffer(vector<string>& samples, Variant& var) {
-
     string genotype;
 
-    for (vector<string>::iterator s = samples.begin(); s != samples.end(); ++s) {
-        string& sampleName = *s;
+    for (const auto& sampleName : samples) {
         map<string, map<string, vector<string> > >::iterator f = var.samples.find(sampleName);
         if (f != var.samples.end()) {
             map<string, vector<string> >& sample = f->second;
@@ -150,8 +148,8 @@ int main(int argc, char** argv) {
     // TODO check if AC is present
     // ensure that AC is listed as an info field
     string line = "##INFO=<ID=" + tag + ",Number=1,Type=String,Description=\"Samples";
-    for (vector<string>::iterator s = samples.begin(); s != samples.end(); ++s) {
-        line += " " + *s;
+    for (const auto& sample : samples) {
+        line += " " + sample;
     }
     line += " have different genotypes\">";
     variantFile.addHeaderLine(line);

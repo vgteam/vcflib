@@ -1,13 +1,9 @@
 #pragma once
 
-#include "convert.h"
-#include "join.h"
-#include "split.h"
 #include "cigar.hpp"
+
+#include <ostream>
 #include <vector>
-#include <set>
-#include <iostream>
-#include <cmath>
 
 namespace vcflib {
 
@@ -28,7 +24,7 @@ public:
     bool homopolymer(void);
 
     VCFIndelAllele(bool i, int l, int p, int rp, string s)
-        : insertion(i), length(l), position(p), readPosition(rp), sequence(s)
+        : insertion(i), length(l), position(p), readPosition(rp), sequence(std::move(s))
         { }
 };
 
@@ -56,7 +52,7 @@ double entropy(const string& st);
 
 int countMismatches(string& alternateSequence, string referenceSequence);
 
-bool leftAlign(string& alternateSequence, Cigar& cigar, string& referenceSequence, bool debug);
+bool leftAlign(const string& alternateSequence, Cigar& cigar, string& referenceSequence, bool debug);
 
 bool stablyLeftAlign(string& alternateSequence, string referenceSequence, Cigar& cigar, int maxiterations, bool debug);
 

@@ -11,6 +11,8 @@
 #include "BedReader.h"
 #include <getopt.h>
 
+#include "join.h"
+
 using namespace std;
 using namespace vcflib;
 
@@ -120,8 +122,8 @@ int main(int argc, char** argv) {
         vector<BedTarget*> overlaps = bed.targetsOverlapping(record);
         vector<string> annotations;
         if (!overlaps.empty()) {
-            for (vector<BedTarget*>::iterator t = overlaps.begin(); t != overlaps.end(); ++t) {
-                annotations.push_back((*t)->desc);
+            for (const auto& t : overlaps) {
+                annotations.push_back(t->desc);
             }
             var.info[annotationInfoKey].push_back(join(annotations, ":"));
         } else if (!defaultAnnotationValue.empty()) {

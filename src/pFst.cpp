@@ -8,21 +8,17 @@
 */
 
 #include "Variant.h"
-#include "split.h"
 #include "cdflib.hpp"
-#include "pdflib.hpp"
 #include "var.hpp"
+#include "index.hpp"
 
 #include <string>
 #include <iostream>
-#include <math.h>
 #include <cmath>
-#include <stdlib.h>
-#include <time.h>
-#include <stdio.h>
 #include <getopt.h>
+#include <memory>
+
 #include "gpatInfo.hpp"
-#include "makeUnique.h"
 
 using namespace std;
 using namespace vcflib;
@@ -78,16 +74,6 @@ double bound(double v){
   return v;
 }
 
-void loadIndices(map<int, int> & index, string set){
-
-  vector<string>  indviduals = split(set, ",");
-
-  vector<string>::iterator it = indviduals.begin();
-
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
 
 double logLbinomial(double x, double n, double p){
 
@@ -274,36 +260,34 @@ int main(int argc, char** argv) {
 	index += 1;
 	}
 
-	unique_ptr<zvar> populationTarget        ;
-	unique_ptr<zvar> populationBackground    ;
-	unique_ptr<zvar> populationTotal         ;
-
-	using Detail::makeUnique;
+	std::unique_ptr<zvar> populationTarget        ;
+	std::unique_ptr<zvar> populationBackground    ;
+	std::unique_ptr<zvar> populationTotal         ;
 
 	if(type == "PO"){
-	  populationTarget         = makeUnique<pooled>();
-          populationBackground = makeUnique<pooled>();
-          populationTotal      = makeUnique<pooled>();
+	  populationTarget         = std::make_unique<pooled>();
+          populationBackground = std::make_unique<pooled>();
+          populationTotal      = std::make_unique<pooled>();
 	}
 	if(type == "PL"){
-	  populationTarget     = makeUnique<pl>();
-	  populationBackground = makeUnique<pl>();
-	  populationTotal      = makeUnique<pl>();
+	  populationTarget     = std::make_unique<pl>();
+	  populationBackground = std::make_unique<pl>();
+	  populationTotal      = std::make_unique<pl>();
 	}
 	if(type == "GL"){
-	  populationTarget     = makeUnique<gl>();
-	  populationBackground = makeUnique<gl>();
-	  populationTotal      = makeUnique<gl>();
+	  populationTarget     = std::make_unique<gl>();
+	  populationBackground = std::make_unique<gl>();
+	  populationTotal      = std::make_unique<gl>();
 	}
 	if(type == "GP"){
-	  populationTarget     = makeUnique<gp>();
-	  populationBackground = makeUnique<gp>();
-	  populationTotal      = makeUnique<gp>();
+	  populationTarget     = std::make_unique<gp>();
+	  populationBackground = std::make_unique<gp>();
+	  populationTotal      = std::make_unique<gp>();
 	}
 	if(type == "GT"){
-          populationTarget     = makeUnique<gt>();
-          populationBackground = makeUnique<gt>();
-          populationTotal      = makeUnique<gt>();
+		  populationTarget     = std::make_unique<gt>();
+          populationBackground = std::make_unique<gt>();
+          populationTotal      = std::make_unique<gt>();
         }
 
 	populationTotal->loadPop(total          , var.position);

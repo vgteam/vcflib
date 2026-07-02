@@ -3,19 +3,49 @@ For contributions see
 and
 [commits](https://github.com/vcflib/vcflib/commits/master).
 
-## TODO
+## ChangeLog ongoing
 
-- [ ] vcfcreatemulti: fix problem with slow and wrong complex regions (implement backtrack)
-      + [ ] check for indels which are really the same
-      + [ ] combine vcfwave duplicated functionality
-- bgzip
-- tabix -p vcf my_file.vcf.gz
-- pangenie, vg deconstruct, vcfbub
+* Added guix-container-manifest.scm that allows building Singularity and Docker containers(!)
 
-## ChangeLog v1.0.13 (?)
+## ChangeLog v1.0.15 (20260319)
 
+* Fix iterator usage in vcfkeepinfo and vcfremoveaberrantgenotypes (Jukka Matilainen)
+* Fixes for vcfwave (Glenn Hickey)
+* Added include files to build with vg
+* Added pkgconfig support
+* Fix wfa2lib builds and sent upstream
+* Update zig build to 0.15, or later, and fix static build with zig for vcfcreatemulti
+* Create tar ball with static binaries
+* Fix building with git submodules only
+* Download statically linked binaries, singularity and docker containers from https://files.genenetwork.org/software/vcflib/v1.0.15/
+  md5sum:
+  5768540e7bef2db1363e422bc37614c4  vcflib-1.0.15-docker.tar.gz # Docker
+  680cd7675325561636e03274e679d195  vcflib-1.0.15-singularity.pack.gz # Singularity
+  7f60bb29dfb498c1059a33e10e99ac02  vcflib-static-git-v1.0.15-2-g0d40ff1.tar.gz # Static binaries
+
+## ChangeLog v1.0.14 (20250518)
+
+* CMake: Fixed building static libs and shared libs (the previous version just compiled a static lib)
+* Updated zig compile for 0.14 (MichaelK)
+* Lots of refactoring (MichaelK)
+* CMake: Improved linker speeds by moving some libs
+* CMake: Improved markdown/pydoc tests, so we don't show the path to the binary
+* guix.scm has multiple outputs including static binaries and a test mode
+* guix.scm has procedure for building with local htslib and tabixpp only
+* Added @RedPenguin100 Michael Kovaliov as a maintainer (welcome!)
+
+## ChangeLog v1.0.13 (20250417)
+
+* Zig support was added to Guix and Conda - and we expect it to be more common soon
+* Addind release protocol to README - so I don't forget bumping version etc.
+* Fixed vcfwave issues (see https://github.com/vcflib/vcflib/issues/416) and conda build (thanks Michael Kovaliov, aka @RedPenguin100)
+* Fixed github actions (Michael)
+* Lots of minor refactoring and cleanup, as well as a memory leak (Michael)
+* tabix.hpp fixed and set `WFA_INCLUDE_DIRS` and `-DBUILD_SHARED_LIBS=ON` (thanks Michael Cho, aka @cho-m)
+* Cmake fixes (thanks Adam Novak)
 * Updated simde submodule
 * Fix CMakeLists.txt not to try to install wfa-lib when it is a package
+* Reverted on Canocalize extraction in Variant class because of downstream use, see https://github.com/vcflib/vcflib/issues/417
 
 ## ChangeLog v1.0.12 (20241122)
 

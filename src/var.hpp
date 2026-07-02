@@ -15,11 +15,6 @@
 #include <string>
 #include <map>
 #include <vector>
-#include <cmath>
-#include <iostream>
-#include <stdio.h>      
-#include <stdlib.h>
-#include "split.h"
 
 using namespace std;
 

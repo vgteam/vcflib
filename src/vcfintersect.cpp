@@ -13,8 +13,10 @@
 #include <getopt.h>
 #include "Fasta.h"
 #include <algorithm>
+#include "convert.h"
 #include <list>
 #include <set>
+#include <sstream>
 
 using namespace std;
 using namespace vcflib;
@@ -314,8 +316,8 @@ int main(int argc, char** argv) {
             Variant* v = &otherVariants[ovar.sequenceName].back();
             otherVariantIntervals[ovar.sequenceName].push_back(Interval<size_t, Variant*>(left, right, v));
         }
-        for (map<string, vector<Interval<size_t, Variant*> > >::iterator j = otherVariantIntervals.begin(); j != otherVariantIntervals.end(); ++j) {
-            variantIntervals[j->first] = IntervalTree<size_t, Variant*>((vector<Interval<size_t, Variant*> >&&)j->second);
+        for (const auto&[key, value] : otherVariantIntervals) {
+            variantIntervals[key] = IntervalTree<size_t, Variant*>((vector<Interval<size_t, Variant*> >&&)value);
         }
 
     }
@@ -375,8 +377,8 @@ int main(int argc, char** argv) {
 
             vector<Variant*> overlapping;
 
-            for (vector<Interval<size_t, Variant*> >::iterator r = results.begin(); r != results.end(); ++r) {
-                overlapping.push_back(r->value);
+            for (const auto& r : results) {
+                overlapping.push_back(r.value);
             }
 
 
@@ -528,8 +530,8 @@ int main(int argc, char** argv) {
                     if (!var.alt.empty()) {
                         vector<Variant*>& vars = variants[var.position];
                         int numalts = 0;
-                        for (vector<Variant*>::iterator v = vars.begin(); v != vars.end(); ++v) {
-                            numalts += (*v)->alt.size();
+                        for (const auto& v : vars) {
+                            numalts += v->alt.size();
                         }
                         if (numalts + var.alt.size() == originalVar.alt.size()) {
                             variants[var.position].clear();
@@ -539,10 +541,10 @@ int main(int argc, char** argv) {
                         }
                     }
 
-                    for (map<long int, vector<Variant*> >::iterator v = variants.begin(); v != variants.end(); ++v) {
-                        for (vector<Variant*>::iterator o = v->second.begin(); o != v->second.end(); ++o) {
-                            cout << **o << endl;
-                            lastOutputPosition = max(lastOutputPosition, (*o)->position);
+                    for (const auto& v : variants) {
+                        for (const auto& o : v.second) {
+                            cout << *o << endl;
+                            lastOutputPosition = max(lastOutputPosition, o->position);
                         }
                     }
                 } else {

@@ -10,6 +10,13 @@
 #include "Variant.h"
 #include "vcf-wfa.h"
 
+#include "convert.h"
+
+#include "cigar.hpp"
+#include "join.h"
+#include "rkmh.hpp"
+
+
 namespace vcflib {
 
 // parsedAlternates returns a hash of 'ref' and a vector of alts. A
@@ -78,11 +85,10 @@ map<string, pair<vector<VariantAllele>,bool> > WfaVariant::wfa_parsedAlternates(
     */
 
 // #pragma omp parallel for
-    for (auto a: alt) { // iterate ALT strings
+    for (const auto& alternate: alt) { // iterate ALT strings
         //for (uint64_t idx = 0; idx < alt.size(); ++idx) {
         //auto& a = alt[idx];
         // unsigned int referencePos;
-        string alternate = a;
         pair<vector<VariantAllele>, bool>& _v = variantAlleles[alternate];
         bool is_inv = false;
         // get the alt/ref mapping in inversion space
@@ -93,7 +99,7 @@ map<string, pair<vector<VariantAllele>,bool> > WfaVariant::wfa_parsedAlternates(
             && max((int)ref.size(), (int)alt.size()) > invMinLen) {
             // check if it's more likely for us to align as an inversion
             auto alt_sketch = rkmh::hash_sequence(
-                a.c_str(), a.size(), invKmerLen, a.size()-invKmerLen+1);
+                alternate.c_str(), alternate.size(), invKmerLen, alternate.size()-invKmerLen+1);
             if (rkmh::compare(alt_sketch, ref_sketch_fwd, invKmerLen)
                 > rkmh::compare(alt_sketch, ref_sketch_rev, invKmerLen)) {
                 is_inv = true;
@@ -334,22 +340,22 @@ void Variant::reduceAlleles(
     map<string, pair<vector<VariantAllele>, bool> > varAlleles,
     VariantCallFile &variantFile,
     Variant var,
-    string parseFlag,
+    const string& parseFlag,
     bool keepInfo,
     bool keepGeno,
     bool debug)
 {
     set<VariantAllele> alleles;
     // collect unique alleles
-    for (auto a: varAlleles) {
-        for (auto va: a.second.first) {
+    for (const auto& a: varAlleles) {
+        for (const auto& va: a.second.first) {
             if (debug) cerr << a.first << " " << va << endl;
             alleles.insert(va); // only inserts first unique allele and ignores next ones
         }
     }
 
     int altcount = 0;
-    for (auto a: alleles) {
+    for (const auto& a: alleles) {
         if (a.ref != a.alt) {
             ++altcount;
             if (debug) cerr << altcount << "$" << a << endl;
@@ -363,9 +369,9 @@ void Variant::reduceAlleles(
 
     // collect variant allele indexed membership
     map<VariantAllele, vector<int> > variantAlleleIndexes; // from serialized VariantAllele to indexes
-    for (auto a: varAlleles) {
+    for (const auto& a: varAlleles) {
         int index = var.altAlleleIndexes[a.first] + 1; // make non-relative
-        for (auto va: a.second.first) {
+        for (const auto& va: a.second.first) {
             variantAlleleIndexes[va].push_back(index);
         }
     }
@@ -379,10 +385,10 @@ void Variant::reduceAlleles(
     };
     map<VariantAllele, var_info_t> alleleStuff;
 
-    for (auto a: var.alt) {
-        auto varalleles = varAlleles[a].first;
+    for (const auto& a: var.alt) {
+        const auto& varalleles = varAlleles[a].first;
         bool is_inv = varAlleles[a].second;
-        for (auto va: varalleles) {
+        for (const auto& va: varalleles) {
             alleleStuff[va].in_inv += is_inv;
         }
     }
@@ -390,13 +396,13 @@ void Variant::reduceAlleles(
     bool hasAf = false;
     if (var.info.find("AF") != var.info.end()) {
         hasAf = true;
-        for (vector<string>::iterator a = var.alt.begin(); a != var.alt.end(); ++a) {
-            vector<VariantAllele>& vars = varAlleles[*a].first;
-            for (vector<VariantAllele>::iterator va = vars.begin(); va != vars.end(); ++va) {
+        for (const auto& a : var.alt) {
+            const vector<VariantAllele>& vars = varAlleles[a].first;
+            for (const auto& va : vars) {
                 double freq;
                 try {
-                    convert(var.info["AF"].at(var.altAlleleIndexes[*a]), freq);
-                    alleleStuff[*va].freq += freq;
+                    convert(var.info["AF"].at(var.altAlleleIndexes[a]), freq);
+                    alleleStuff[va].freq += freq;
                 } catch (...) {
                     cerr << "vcfallelicprimitives WARNING: AF does not have count == alts @ "
                          << var.sequenceName << ":" << var.position << endl;
@@ -408,9 +414,9 @@ void Variant::reduceAlleles(
     bool hasAc = false;
     if (var.info.find("AC") != var.info.end()) {
         hasAc = true;
-        for (auto a: var.alt) {
-            auto vars = varAlleles[a].first;
-            for (auto va: vars) {
+        for (const auto& a: var.alt) {
+            const auto& vars = varAlleles[a].first;
+            for (const auto& va: vars) {
                 int count;
                 try {
                     convert(var.info["AC"].at(var.altAlleleIndexes[a]), count);
@@ -424,21 +430,20 @@ void Variant::reduceAlleles(
     }
 
     if (keepInfo) {
-        for (map<string, vector<string> >::iterator infoit = var.info.begin();
-             infoit != var.info.end(); ++infoit) {
-            string key = infoit->first;
-            for (vector<string>::iterator a = var.alt.begin(); a != var.alt.end(); ++a) {
-                vector<VariantAllele>& vars = varAlleles[*a].first;
-                for (vector<VariantAllele>::iterator va = vars.begin(); va != vars.end(); ++va) {
+        for (const auto& infoit : var.info) {
+            const string& key = infoit.first;
+            for (const auto& alternate : var.alt) {
+                const vector<VariantAllele>& vars = varAlleles[alternate].first;
+                for (const auto& va : vars) {
                     string val;
                     vector<string>& vals = var.info[key];
                     if (vals.size() == var.alt.size()) { // allele count for info
-                        val = vals.at(var.altAlleleIndexes[*a]);
+                        val = vals.at(var.altAlleleIndexes[alternate]);
                     } else if (vals.size() == 1) { // site-wise count
                         val = vals.front();
                     } // don't handle other multiples... how would we do this without going crazy?
                     if (!val.empty()) {
-                        alleleStuff[*va].info[key] = val;
+                        alleleStuff[va].info[key] = val;
                     }
                 }
             }
@@ -470,8 +475,8 @@ void Variant::reduceAlleles(
         vector<int>& originalIndexes = variantAlleleIndexes[*a];
         string type;
         int len = 0;
-        if (a->ref.size() && a->alt.size()
-            && a->ref.at(0) == a->alt.at(0)) { // well-behaved indels
+        if (!a->ref.empty() && !a->alt.empty()
+	        && a->ref.at(0) == a->alt.at(0)) { // well-behaved indels
             if (a->ref.size() > a->alt.size()) {
                 type = "del";
                 len = a->ref.size() - a->alt.size();
@@ -532,9 +537,7 @@ void Variant::reduceAlleles(
             v.info["AC"].push_back(convert(alleleStuff[*a].count));
         }
         if (keepInfo) {
-            for (map<string, vector<string> >::iterator infoit = var.info.begin();
-                 infoit != var.info.end(); ++infoit) {
-                string key = infoit->first;
+            for (const auto&[key, _] : var.info) {
                 if (key != "AF" && key != "AC" && key != "TYPE" && key != "LEN") { // don't clobber previous
                     v.info[key].push_back(alleleStuff[*a].info[key]);
                 }
@@ -546,16 +549,16 @@ void Variant::reduceAlleles(
         v.sequenceName = var.sequenceName;
         v.position = a->position; // ... by definition, this should be == if the variant was found
         if (v.ref.size() < a->ref.size()) {
-            for (vector<string>::iterator va = v.alt.begin(); va != v.alt.end(); ++va) {
-                *va += a->ref.substr(v.ref.size());
+            for (auto& va : v.alt) {
+                va += a->ref.substr(v.ref.size());
             }
             v.ref = a->ref;
         }
         v.alt.push_back(a->alt);
 
         int alleleIndex = v.alt.size();
-        for (vector<int>::iterator i = originalIndexes.begin(); i != originalIndexes.end(); ++i) {
-            unpackedAlleleIndexes[*i][v.position] = alleleIndex;
+        for (const auto& originalIndex : originalIndexes) {
+            unpackedAlleleIndexes[originalIndex][v.position] = alleleIndex;
             //unpackedAlleleInversions[*i] = v.inv
         }
         // add null allele
@@ -595,31 +598,30 @@ void Variant::reduceAlleles(
     }
 
     // genotypes
-    for (vector<string>::iterator s = var.sampleNames.begin(); s != var.sampleNames.end(); ++s) {
-        string& sampleName = *s;
-        if (var.samples.find(sampleName) == var.samples.end()) {
+    for (auto& sampleName : var.sampleNames) {
+        auto samplesIt = var.samples.find(sampleName);
+        if (samplesIt == var.samples.end()) {
             continue;
         }
-        map<string, vector<string> >& sample = var.samples[sampleName];
+        map<string, vector<string> >& sample = samplesIt->second;
         if (sample.find("GT") == sample.end()) {
             continue;
         }
         string& genotype = sample["GT"].front();
         vector<string> genotypeStrs = split(genotype, "|/");
         vector<int> genotypeIndexes;
-        for (vector<string>::iterator s = genotypeStrs.begin(); s != genotypeStrs.end(); ++s) {
+        for (const auto& genotypeStr : genotypeStrs) {
             int i;
-            if (!convert(*s, i)) {
+            if (!convert(genotypeStr, i)) {
                 genotypeIndexes.push_back(ALLELE_NULL);
             } else {
                 genotypeIndexes.push_back(i);
             }
         }
         map<long unsigned int, vector<int> > positionIndexes;
-        for (vector<int>::iterator g = genotypeIndexes.begin(); g != genotypeIndexes.end(); ++g) {
-            int oldIndex = *g;
-            for (map<long unsigned int, Variant>::iterator v = variants.begin(); v != variants.end(); ++v) {
-                const long unsigned int& p = v->first;
+        for (const auto oldIndex : genotypeIndexes) {
+            for (const auto& v : variants) {
+                const long unsigned int& p = v.first;
                 if (oldIndex == 0) { // reference
                     positionIndexes[p].push_back(0);
                 } else {
@@ -627,13 +629,13 @@ void Variant::reduceAlleles(
                 }
             }
         }
-        for (map<long unsigned int, Variant>::iterator v = variants.begin(); v != variants.end(); ++v) {
-            Variant& variant = v->second;
-            vector<int>& gtints = positionIndexes[v->first];
+        for (auto& v : variants) {
+            Variant& variant = v.second;
+            vector<int>& gtints = positionIndexes[v.first];
             vector<string> gtstrs;
-            for (vector<int>::iterator i = gtints.begin(); i != gtints.end(); ++i) {
-                if (*i != ALLELE_NULL) {
-                    gtstrs.push_back(convert(*i));
+            for (const auto i : gtints) {
+                if (i != ALLELE_NULL) {
+                    gtstrs.push_back(convert(i));
                 } else {
                     gtstrs.push_back(".");
                 }

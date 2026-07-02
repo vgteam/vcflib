@@ -8,22 +8,24 @@
 */
 
 #include "Variant.h"
-#include "split.h"
-#include "cdflib.hpp"
 #include "pdflib.hpp"
 #include "var.hpp"
+#include "index.hpp"
+#include "phase.hpp"
 
 #include <string>
 #include <iostream>
 #include <math.h>  
 #include <cmath>
-#include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <memory>
 
 using namespace std;
-using namespace vcf;
+using namespace vcflib;
+
+
 void printVersion(void){
 	    cerr << "INFO: version 1.1.0 ; date: April 2014 ; author: Zev Kronenberg; email : zev.kronenberg@utah.edu " << endl;
 	    exit(1);
@@ -60,26 +62,16 @@ void printHelp(void){
   exit(1);
 }
 
-void clearHaplotypes(string haplotypes[][2], int ntarget){
+void clearHaplotypes(vector<pair<string,string>>& haplotypes, int ntarget){
   for(int i= 0; i < ntarget; i++){
-    haplotypes[i][0].clear();
-    haplotypes[i][1].clear();
+    haplotypes[i].first.clear();
+    haplotypes[i].second.clear();
   }
 }
 
-void loadIndices(map<int, int> & index, string set){
-  
-  vector<string>  indviduals = split(set, ",");
-  vector<string>::iterator it = indviduals.begin();
-  
-  for(; it != indviduals.end(); it++){
-    index[ atoi( (*it).c_str() ) ] = 1;
-  }
-}
+void calc(const vector<pair<string, string>>& haplotypes, int /*nhaps*/, vector<long int> pos, vector<double> afs, vector<int> & target, vector<int> & background, string seqid){
 
-void calc(string haplotypes[][2], int nhaps, vector<long int> pos, vector<double> afs, vector<int> & target, vector<int> & background, string seqid){
-
-  for(int snp = 0; snp < haplotypes[0][0].length(); snp++){
+  for(int snp = 0; snp < haplotypes[0].first.length(); snp++){
     
     double ehhsat = 1;
     double ehhsab = 1;
@@ -99,7 +91,7 @@ void calc(string haplotypes[][2], int nhaps, vector<long int> pos, vector<double
       if(start == -1){
 	break;
       }
-      if(end == haplotypes[0][0].length() - 1){
+      if(end == haplotypes[0].first.length() - 1){
 	break;
       }
       
@@ -117,26 +109,26 @@ void calc(string haplotypes[][2], int nhaps, vector<long int> pos, vector<double
       // hashing haplotypes into maps for both chr1 and chr2 target[][1 & 2]
 
       for(int i = 0; i < target.size(); i++){
-	targetH[ haplotypes[target[i]][0].substr(start, (end - start)) ]++;
-	targetH[ haplotypes[target[i]][1].substr(start, (end - start)) ]++;
+	targetH[ haplotypes[target[i]].first.substr(start, (end - start)) ]++;
+	targetH[ haplotypes[target[i]].second.substr(start, (end - start)) ]++;
       }
       for(int i = 0; i < background.size(); i++){
-	backgroundH[ haplotypes[background[i]][0].substr(start, (end - start)) ]++;
-	backgroundH[ haplotypes[background[i]][0].substr(start, (end - start)) ]++;
+	backgroundH[ haplotypes[background[i]].first.substr(start, (end - start)) ]++;
+	backgroundH[ haplotypes[background[i]].first.substr(start, (end - start)) ]++;
       }
 
-      // interating over the target populations haplotypes
-      for( map<string, int>::iterator th = targetH.begin(); th != targetH.end(); th++){    	
-	// grabbing the core SNP (*th).first.substr((end-start)/2, 1) == "1"
-	if( (*th).first.substr((end-start)/2, 1) == "1"){     
-	   sumaT += r8_choose(th->second, 2);  
-	   naltT += th->second;
-	}
-	else{
-	  sumrT += r8_choose(th->second, 2);  
-	  nrefT += th->second;
-	}
-      }
+    	// iterating over the target populations haplotypes
+    	for(const auto&[key, val] : targetH){
+    		// grabbing the core SNP (*th).first.substr((end-start)/2, 1) == "1"
+    		if( key.substr((end-start)/2, 1) == "1"){
+    			sumaT += r8_choose(val, 2);
+    			naltT += val;
+    		}
+    		else{
+    			sumrT += r8_choose(val, 2);
+    			nrefT += val;
+    		}
+    	}
 
       // integrating over the background populations haplotypes
       for( map<string, int>::iterator bh = backgroundH.begin(); bh != backgroundH.end(); bh++){
@@ -185,19 +177,6 @@ double EHH(string haplotypes[][2], int nhaps){
   
   return max;
 
-}
-
-void loadPhased(string haplotypes[][2], genotype * pop, int ntarget){
-  
-  int indIndex = 0;
-
-  for(vector<string>::iterator ind = pop->gts.begin(); ind != pop->gts.end(); ind++){
-    string g = (*ind);
-    vector< string > gs = split(g, "|");
-    haplotypes[indIndex][0].append(gs[0]);
-    haplotypes[indIndex][1].append(gs[1]);
-    indIndex += 1;
-  }
 }
 
 int main(int argc, char** argv) {
@@ -353,8 +332,8 @@ int main(int argc, char** argv) {
     vector<long int> positions;
     vector<double>   afs;
 
-    string haplotypes [nsamples][2];    
-    
+    vector<pair<string, string>> haplotypes(nsamples);
+
     string currentSeqid = "NA";
     
     while (variantFile.getNextVariant(var)) {
@@ -370,7 +349,7 @@ int main(int argc, char** argv) {
       }
 
       if(currentSeqid != var.sequenceName){
-	if(haplotypes[0][0].length() > 10){
+	if(haplotypes[0].first.length() > 10){
 	  calc(haplotypes, nsamples, positions, afs, target_h, background_h, currentSeqid);
 	}
 	clearHaplotypes(haplotypes, nsamples);
@@ -404,24 +383,24 @@ int main(int argc, char** argv) {
       unique_ptr<genotype> populationTotal     ;
       
       if(type == "PL"){
-	populationTarget     = makeUnique<pl>();
-	populationBackground = makeUnique<pl>();
-	populationTotal      = makeUnique<pl>();
+	populationTarget     = std::make_unique<pl>();
+	populationBackground = std::make_unique<pl>();
+	populationTotal      = std::make_unique<pl>();
       }
       if(type == "GL"){
-	populationTarget     = makeUnique<gl>();
-	populationBackground = makeUnique<gl>();
-	populationTotal      = makeUnique<gl>();
+	populationTarget     = std::make_unique<gl>();
+	populationBackground = std::make_unique<gl>();
+	populationTotal      = std::make_unique<gl>();
       }
       if(type == "GP"){
-	populationTarget     = makeUnique<gp>();
-	populationBackground = makeUnique<gp>();
-	populationTotal      = makeUnique<gp>();
+	populationTarget     = std::make_unique<gp>();
+	populationBackground = std::make_unique<gp>();
+	populationTotal      = std::make_unique<gp>();
       }
       if(type == "GT"){
-	populationTarget     = makeUnique<gt>();
-        populationBackground = makeUnique<gt>();
-        populationTotal      = makeUnique<gt>();
+	populationTarget     = std::make_unique<gt>();
+        populationBackground = std::make_unique<gt>();
+        populationTotal      = std::make_unique<gt>();
       }
       
       populationTarget->loadPop(target,         var.sequenceName, var.position);
@@ -439,7 +418,7 @@ int main(int argc, char** argv) {
 
       afs.push_back(populationTotal->af);
       positions.push_back(var.position);
-      loadPhased(haplotypes, populationTotal, nsamples);
+      loadPhased(haplotypes, populationTotal);
 
     }
 

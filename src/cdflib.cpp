@@ -11,7 +11,6 @@
 # include <iostream>
 # include <iomanip>
 # include <cmath>
-# include <ctime>
 # include <cstring>
 
 using namespace std;
@@ -8037,7 +8036,7 @@ S20:
 }
 //****************************************************************************80
 
-void ftnstop ( string msg )
+void ftnstop ( const string& msg )
 
 //****************************************************************************80
 //

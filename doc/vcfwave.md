@@ -112,7 +112,7 @@ This aligns and adjusts the genotypes accordingly splitting into multiple record
 
 ```python
 
->>> sh("../build/vcfwave -L 1000 ../samples/10158243.vcf|grep -v ^\#")
+>>> sh("vcfwave -L 1000 ../samples/10158243.vcf|grep -v ^\#")
 grch38#chr4     10158244        >3655>3662_1    CCCCCACCCCCAC   C       60      .       AC=1;AF=0.011236;AN=89;AT=>3655>3656>3657>3660>3662;NS=45;LV=0;ORIGIN=grch38#chr4:10158243;LEN=12;TYPE=del        GT      0|0     0|0     0|0     0|0     1|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0
 grch38#chr4     10158244        >3655>3662_2    CCCCCACCCCCACC  C       60      .       AC=3;AF=0.033708;AN=89;AT=>3655>3656>3660>3662;NS=45;LV=0;ORIGIN=grch38#chr4:10158243;LEN=13;TYPE=del     GT      0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     0|0     1|0     0|1     0|0     0|0     0|0     0|0     0|0     0|0     0|1     0|0     0
 grch38#chr4     10158245        >3655>3662_3    CCCCACCCCCACC   C       60      .       AC=64;AF=0.719101;AN=89;AT=>3655>3656>3657>3658>3659>3660>3662;NS=45;LV=0;ORIGIN=grch38#chr4:10158243;LEN=12;TYPE=del     GT      0|0     1|1     1|1     1|0     0|1     0|0     0|1     0|1     1|1     1|1     1|1     1|1     1|1     1|1     1|1     0|0     1|1     1|1     1|1     1|0     1|0     1|0     1|0     1|1     1|1     1|0     1|1     1|1     0|0     1|0     1|1     0|1     1|1     1|1     0|1     1|0     1|1     1|1     0|1     1|1     1|1     1|0     1|0     1|1     0
@@ -140,6 +140,10 @@ output in <a href="../data/regression/vcfwave_4.vcf">vcfwave_4.vcf</a>
 >>> run_stdout("vcfwave -L 10000 ../samples/grch38#chr4_10083863-10181258.vcf", ext="vcf")
 output in <a href="../data/regression/vcfwave_5.vcf">vcfwave_5.vcf</a>
 
+# ./vcfwave -L 10000 ../samples/test_variant_drop.vcf > ../test/data/regression/vcfwave_6.vcf
+>>> run_stdout("vcfwave -L 10000 ../samples/test_variant_drop.vcf", ext="vcf")
+output in <a href="../data/regression/vcfwave_6.vcf">vcfwave_6.vcf</a>
+
 ```
 
 ## Inversions
@@ -157,7 +161,7 @@ a       281     >1>9    AGCCGGGGCAGAAAGTTCTTCCTTGAATGTGGTCATCTGCATTTCAGCTCAGGAAT
 To
 
 ```python
->>> sh("../build/vcfwave ../samples/inversion.vcf|grep INV")
+>>> sh("vcfwave ../samples/inversion.vcf|grep INV")
 ##INFO=<ID=INV,Number=0,Type=Flag,Description="Inversion detected">
 a       281     >1>9    AGCCGGGGCAGAAAGTTCTTCCTTGAATGTGGTCATCTGCATTTCAGCTCAGGAATCCTGCAAAAGACAG  CTGTCTTTTGCAGGATTCCTGTGCTGAAATGCAGATGACCGCATTCAAGGAAGAACTATCTGCCCCGGCT  60      .       AC=1;AF=1.000000;AN=1;AT=>1>2>3>4>5>6>7>8>9;NS=1;LV=0;LEN=70;INV=YES;TYPE=mnp  GT      1
 
@@ -167,4 +171,4 @@ Note the `INV=YES' info.
 
 # LICENSE
 
-Copyright 2022-2024 (C) Erik Garrison, Pjotr Prins and vcflib contributors. MIT licensed.
+Copyright 2022-2025 (C) Erik Garrison, Pjotr Prins and vcflib contributors. MIT licensed.
