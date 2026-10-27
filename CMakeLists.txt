@@ -23,6 +23,7 @@ find_package(ZLIB REQUIRED)
 find_package(pybind11 CONFIG)
 
 include(GNUInstallDirs)
+include(CMakeDependentOption)
 
 feature_summary(
   FATAL_ON_MISSING_REQUIRED_PACKAGES
@@ -31,12 +32,25 @@ feature_summary(
 # ---- Options
 
 option(BUILD_STATIC "Build static binary" OFF)
+cmake_dependent_option(BUILD_STATIC_LIBS "Build static libraries" OFF "NOT BUILD_STATIC" ON)
+cmake_dependent_option(BUILD_POSITION_INDEPENDENT_CODE "Build position-independent code" OFF "BUILD_STATIC_LIBS" ON)
 option(BUILD_DOC "Build documentation" ON)
 option(OPENMP "Enable OpenMP" ON) # disabling does not work because of vcfwave
 option(PROFILING "Enable profiling" OFF)
 option(GPROF "Enable gprof profiling" OFF)
 option(ASAN "Use address sanitiser" OFF)
-option(ZIG "Set to OFF to disable the zig code" ON)
+# Zig is optional and disabled by default: vcfcreatemulti falls back to
+# its legacy C++ implementation (NO_ZIG). Enable the zig code with
+# -DNO_ZIG=OFF (vcfputtogetheragain provides a plain C alternative).
+option(NO_ZIG "Set to OFF to build the zig code for vcfcreatemulti (default ON)" ON)
+option(ZIG "Set to ON to force building the zig code (overrides NO_ZIG)" OFF)
+if (ZIG)
+  # forced on with -DZIG=ON
+elseif (NO_ZIG)
+  set(ZIG OFF)
+else()
+  set(ZIG ON)
+endif()
 option(WFA_GITMODULE "Force local git submodule for WFA2LIB" OFF) # disabled by default now
 include(CheckIPOSupported) # adds lto
 check_ipo_supported(RESULT ipo_supported OUTPUT output)
@@ -44,12 +58,22 @@ check_ipo_supported(RESULT ipo_supported OUTPUT output)
 set(EXTRA_FLAGS " ") # otherwise it injects OFF
 
 if (BUILD_STATIC)
+  message(STATUS "vcflib executable linking mode: static")
+  set(CMAKE_EXE_LINKER_FLAGS "-static")
   set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-  set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
 else ()
-  set(BUILD_SHARED_LIBS ON)
-  set(CMAKE_POSITION_INDEPENDENT_CODE ON) # for pybind11
+  message(STATUS "vcflib executable linking mode: dynamic")
 endif ()
+
+if (BUILD_STATIC_LIBS)
+  message(STATUS "vcflib library type: static")
+else ()
+  message(STATUS "vcflib library type: dynamic")
+  # We might try building pybind11 bindings
+endif ()
+set(CMAKE_POSITION_INDEPENDENT_CODE ${BUILD_POSITION_INDEPENDENT_CODE})
+message(STATUS "position-independent code: ${CMAKE_POSITION_INDEPENDENT_CODE}")
+
 
 # ---- Dependencies
 
@@ -445,7 +469,7 @@ endif()
 
 # ---- Build all
 
-if (BUILD_SHARED_LIBS)
+if (NOT BUILD_STATIC_LIBS)
   target_link_libraries(vcflib ${WFALIB})
 endif()
 
@@ -473,6 +497,17 @@ if (NOT BUILD_ONLY_LIB)
   endif()
   install(TARGETS ${BINS} ${WFBINS} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+  # ---- vcfputtogetheragain: plain C alternative to the zig
+  # implementation of vcfcreatemulti. Standalone C, no vcflib/zig
+  # linkage. Uses vcf-std for strict VCFv4.5 field validation.
+  add_executable(vcfputtogetheragain src/vcfputtogetheragain.c src/vcf-std.c)
+  install(TARGETS vcfputtogetheragain RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  # ---- vcfvalidate: reports VCFv4.5 field errors for every data line
+  # (uses the same vcf-std validator; strict, never lenient)
+  add_executable(vcfvalidate src/vcfvalidate.c src/vcf-std.c)
+  install(TARGETS vcfvalidate RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   # ---- Copy scripts
   foreach(SCRIPT ${SCRIPTS})
     install(PROGRAMS ./scripts/${SCRIPT} DESTINATION ${CMAKE_INSTALL_BINDIR} RENAME ${SCRIPT})
@@ -480,8 +515,13 @@ if (NOT BUILD_ONLY_LIB)
 endif()
 
 
-if (NOT BUILD_STATIC) # only when not building static
+if (NOT BUILD_STATIC_LIBS) # only when building dynamic libraries
   # ---- Python bindings - mostly for testing at this stage
+  if (pybind11_FOUND)
+    # pyvcfstd: bindings for the standalone VCFv4.5 field validator
+    pybind11_add_module(pyvcfstd "${CMAKE_SOURCE_DIR}/src/pyvcfstd.cpp" "${CMAKE_SOURCE_DIR}/src/vcf-std.c")
+    install(TARGETS pyvcfstd LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  endif()
   pybind11_add_module(pyvcflib "${CMAKE_SOURCE_DIR}/src/pythonffi.cpp")
   # add_dependencies(pyvcflib CURL::libcurl)
   target_link_libraries(pyvcflib PUBLIC vcflib ${vcflib_LIBS} ${WFALIB})
@@ -537,7 +577,7 @@ endfunction()
   add_zigtest()
 endif(ZIG_TEST)
 
-if (NOT BUILD_STATIC)
+if (NOT BUILD_STATIC_LIBS)
   add_pytest(realign)
   add_pydoctest(pyvcflib)
 endif()
@@ -549,8 +589,13 @@ add_pydoctest(vcffilter)
 if (ZIG)
   add_pydoctest(vcfcreatemulti)
 endif (ZIG)
+add_pydoctest(vcfputtogetheragain)
+add_pydoctest(vcf-std)
+add_pydoctest(vcfputtogetheragain-norm)
+add_pydoctest(vcfvalidate)
 
 add_pydoctest(vcfnulldotslashdot)
+add_pydoctest(vcfclassify)
 add_doctest(doc/vcfintersect)
 
 # ---- Build documentation
@@ -578,6 +623,8 @@ if (PANDOC)
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfallelicprimitives.md ./doc/vcfallelicprimitives.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfwave.md ./doc/vcfwave.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfcreatemulti.md ./doc/vcfcreatemulti.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfputtogetheragain.md ./doc/vcfputtogetheragain.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfputtogetheragain-norm.md ./doc/vcfputtogetheragain-norm.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcflib-api.md ./doc/vcflib-api.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/pyvcflib.md ./doc/pyvcflib.md
         # generate man pages from markdown
@@ -589,6 +636,8 @@ if (PANDOC)
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfallelicprimitives.md ./doc/vcfallelicprimitives.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfwave.md ./doc/vcfwave.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfcreatemulti.md ./doc/vcfcreatemulti.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfputtogetheragain.md ./doc/vcfputtogetheragain.md
+        COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcfputtogetheragain-norm.md ./doc/vcfputtogetheragain-norm.md
         # Documented test cases for Python bindings
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/pyvcflib.md ./doc/pyvcflib.md
         COMMAND ${CMAKE_COMMAND} -E copy ./test/pytest/vcflib-api.md ./doc/vcflib-api.md
