@@ -33,6 +33,7 @@ feature_summary(
 
 option(BUILD_STATIC "Build static binary" OFF)
 cmake_dependent_option(BUILD_STATIC_LIBS "Build static libraries" OFF "NOT BUILD_STATIC" ON)
+cmake_dependent_option(BUILD_POSITION_INDEPENDENT_CODE "Build position-independent code" OFF "BUILD_STATIC_LIBS" ON)
 option(BUILD_DOC "Build documentation" ON)
 option(OPENMP "Enable OpenMP" ON) # disabling does not work because of vcfwave
 option(PROFILING "Enable profiling" OFF)
@@ -66,11 +67,13 @@ endif ()
 
 if (BUILD_STATIC_LIBS)
   message(STATUS "vcflib library type: static")
-  set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
 else ()
   message(STATUS "vcflib library type: dynamic")
-  set(CMAKE_POSITION_INDEPENDENT_CODE ON) # for pybind11
+  # We might try building pybind11 bindings
 endif ()
+set(CMAKE_POSITION_INDEPENDENT_CODE ${BUILD_POSITION_INDEPENDENT_CODE})
+message(STATUS "position-independent code: ${CMAKE_POSITION_INDEPENDENT_CODE}")
+
 
 # ---- Dependencies
 
